@@ -125,3 +125,6 @@ docker-compose up -d
 ```
 Then update `server/.env` with `DATABASE_URL="postgresql://nexthire:nexthire_password@localhost:5432/nexthire_db?schema=public"`.
 # nexthire
+
+
+The app is still in progress
