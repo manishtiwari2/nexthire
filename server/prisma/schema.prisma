@@ -1,0 +1,452 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  ADMIN
+  CANDIDATE
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Language {
+  PYTHON
+  JAVASCRIPT
+  TYPESCRIPT
+  CPP
+  JAVA
+  GO
+}
+
+enum ContestStatus {
+  UPCOMING
+  LIVE
+  ENDED
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  WAITING_ROOM
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SubmissionStatus {
+  PENDING
+  RUNNING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+}
+
+enum SubmissionContext {
+  PRACTICE
+  CONTEST
+  INTERVIEW
+}
+
+enum ParticipantRole {
+  CANDIDATE
+  INTERVIEWER
+  OBSERVER
+}
+
+enum NotificationType {
+  SYSTEM
+  CONTEST
+  INTERVIEW
+  SUBMISSION
+  AI_INSIGHT
+}
+
+// ==========================================
+// USER & AUTHENTICATION
+// ==========================================
+
+model User {
+  id                    String                 @id @default(uuid())
+  email                 String                 @unique
+  name                  String
+  role                  Role                   @default(CANDIDATE)
+  avatarUrl             String?
+  googleId              String?                @unique
+  isVerified            Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  profile               Profile?
+  submissions           Submission[]
+  contestParticipants   ContestParticipant[]
+  interviewParticipants InterviewParticipant[]
+  revisionSchedules     RevisionSchedule[]
+  createdContests       Contest[]              @relation("ContestHost")
+  createdInterviews     Interview[]            @relation("InterviewHost")
+  createdInvites        ContestInvite[]        @relation("InviteCreator")
+  notifications         Notification[]
+  aiFeedbacks           AIFeedback[]
+  aiHintRequests        AIHintRequest[]
+}
+
+model Profile {
+  id          String         @id @default(uuid())
+  userId      String         @unique
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio         String?
+  githubUrl   String?
+  linkedinUrl String?
+  userSkills  ProfileSkill[]
+}
+
+model ProfileSkill {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skillName String
+}
+
+// ==========================================
+// QUESTION BANK & TOPICS
+// ==========================================
+
+model Topic {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  slug      String     @unique
+  questions Question[]
+}
+
+model Question {
+  id               String             @id @default(uuid())
+  title            String
+  slug             String             @unique
+  difficulty       Difficulty         @default(EASY)
+  topicId          String
+  topic            Topic              @relation(fields: [topicId], references: [id])
+  description      String
+  constraints      String
+  timeLimitMs      Int                @default(2000)
+  memoryLimitMb    Int                @default(256)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  starterCodes     StarterCode[]
+  testCases        TestCase[]
+  hints            Hint[]
+  editorial        Editorial?
+  questionTags     QuestionTagMap[]
+  companyTags      CompanyTagMap[]
+  contestQuestions ContestQuestion[]
+  submissions      Submission[]
+  revisions        RevisionSchedule[]
+  interviews       Interview[]
+  aiHintRequests   AIHintRequest[]
+
+  @@index([topicId])
+}
+
+model StarterCode {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  language   Language
+  template   String
+
+  @@unique([questionId, language])
+}
+
+model TestCase {
+  id             String   @id @default(uuid())
+  questionId     String
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  input          String
+  expectedOutput String
+  explanation    String?
+  isSample       Boolean  @default(false)
+  orderIndex     Int      @default(0)
+}
+
+model Hint {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  orderIndex Int
+  content    String
+}
+
+model Editorial {
+  id         String   @id @default(uuid())
+  questionId String   @unique
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content    String
+  solution   String
+}
+
+model Tag {
+  id        String           @id @default(uuid())
+  name      String           @unique
+  questions QuestionTagMap[]
+}
+
+model QuestionTagMap {
+  questionId String
+  tagId      String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+}
+
+model CompanyTag {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  questions CompanyTagMap[]
+}
+
+model CompanyTagMap {
+  questionId   String
+  companyTagId String
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  companyTag   CompanyTag @relation(fields: [companyTagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, companyTagId])
+}
+
+// ==========================================
+// SPACED REPETITION / REVISION SCHEDULE
+// ==========================================
+
+model RevisionSchedule {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  intervalDays   Int       @default(1)
+  easeFactor     Float     @default(2.5)
+  reviewCount    Int       @default(0)
+  lastReviewedAt DateTime  @default(now())
+  nextReviewAt   DateTime
+
+  @@unique([userId, questionId])
+}
+
+// ==========================================
+// CONTESTS, INVITES & PARTICIPATION
+// ==========================================
+
+model Contest {
+  id           String               @id @default(uuid())
+  title        String
+  description  String
+  bannerUrl    String?
+  startTime    DateTime
+  endTime      DateTime
+  status       ContestStatus        @default(UPCOMING)
+  hostId       String
+  host         User                 @relation("ContestHost", fields: [hostId], references: [id])
+  createdAt    DateTime             @default(now())
+
+  questions    ContestQuestion[]
+  participants ContestParticipant[]
+  invites      ContestInvite[]
+  submissions  Submission[]
+}
+
+model ContestQuestion {
+  id         String   @id @default(uuid())
+  contestId  String
+  contest    Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  orderIndex Int
+  points     Int      @default(100)
+
+  @@unique([contestId, questionId])
+}
+
+model ContestInvite {
+  id         String    @id @default(uuid())
+  contestId  String
+  contest    Contest   @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  code       String    @unique
+  creatorId  String
+  creator    User      @relation("InviteCreator", fields: [creatorId], references: [id])
+  maxUses    Int?
+  usedCount  Int       @default(0)
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model ContestParticipant {
+  id              String    @id @default(uuid())
+  contestId       String
+  contest         Contest   @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registeredAt    DateTime  @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  lastHeartbeatAt DateTime?
+  score           Int       @default(0)
+  penalty         Int       @default(0)
+  isDisqualified  Boolean   @default(false)
+  rank            Int?
+
+  @@unique([contestId, userId])
+}
+
+// ==========================================
+// INTERVIEWS & PARTICIPATION
+// ==========================================
+
+model Interview {
+  id           String                 @id @default(uuid())
+  roomCode     String                 @unique
+  position     String
+  scheduledAt  DateTime
+  status       InterviewStatus        @default(SCHEDULED)
+  hostId       String
+  host         User                   @relation("InterviewHost", fields: [hostId], references: [id])
+  problemId    String?
+  problem      Question?              @relation(fields: [problemId], references: [id])
+
+  participants InterviewParticipant[]
+  submissions  Submission[]
+  report       InterviewReport?
+  aiSessions   AIInterviewerSession[]
+}
+
+model InterviewParticipant {
+  id          String          @id @default(uuid())
+  interviewId String
+  interview   Interview       @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        ParticipantRole @default(CANDIDATE)
+  joinedAt    DateTime?
+
+  @@unique([interviewId, userId])
+}
+
+model InterviewReport {
+  id                  String    @id @default(uuid())
+  interviewId         String    @unique
+  interview           Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  overallScore        Int
+  problemSolvingScore Int
+  codeQualityScore    Int
+  communicationScore  Int
+  systemDesignScore   Int
+  feedback            String
+  strengths           String
+  improvements        String
+  createdAt           DateTime  @default(now())
+}
+
+// ==========================================
+// SUBMISSIONS & SEPARATE EXECUTION RESULTS
+// ==========================================
+
+model Submission {
+  id          String            @id @default(uuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  context     SubmissionContext @default(PRACTICE)
+  contestId   String?
+  contest     Contest?          @relation(fields: [contestId], references: [id])
+  interviewId String?
+  interview   Interview?        @relation(fields: [interviewId], references: [id])
+  code        String
+  language    Language
+  status      SubmissionStatus  @default(PENDING)
+  createdAt   DateTime          @default(now())
+
+  executions  ExecutionResult[]
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([contestId])
+  @@index([interviewId])
+}
+
+model ExecutionResult {
+  id             String           @id @default(uuid())
+  submissionId   String
+  submission     Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  status         SubmissionStatus @default(PENDING)
+  executionTime  Float?
+  memoryUsed     Float?
+  passCount      Int              @default(0)
+  totalTestCases Int              @default(0)
+  compilerOutput String?
+  judgedAt       DateTime         @default(now())
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(SYSTEM)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+}
+
+// ==========================================
+// AI EXTENSION POINTS (FUTURE RESERVED SCHEMA)
+// ==========================================
+
+model AIFeedback {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeSnippet    String
+  suggestedFix   String
+  explanation    String
+  createdAt      DateTime @default(now())
+}
+
+model AIHintRequest {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  hintText   String
+  createdAt  DateTime @default(now())
+}
+
+model AIInterviewerSession {
+  id          String    @id @default(uuid())
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  transcript  String
+  summary     String
+  createdAt   DateTime  @default(now())
+}

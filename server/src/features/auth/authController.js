@@ -1,0 +1,143 @@
+const { prisma } = require('../../shared/db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('./authMiddleware');
+
+function determineRole(email) {
+  const normalized = email.toLowerCase().trim();
+  if (normalized === 'anuradha@admin.at' || normalized === 'manish@admin.mt') {
+    return 'ADMIN';
+  }
+  return 'CANDIDATE';
+}
+
+async function googleLogin(req, res) {
+  try {
+    const { email, name, avatarUrl, googleId } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required for Google auth' });
+    }
+
+    const assignedRole = determineRole(email);
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      const randomPassword = await bcrypt.hash(`google-oauth-${Date.now()}`, 10);
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: name || email.split('@')[0],
+          avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`,
+          role: assignedRole,
+          googleId: googleId || `gid-${Date.now()}`
+        }
+      });
+
+      await prisma.profile.create({
+        data: { userId: user.id }
+      });
+    } else {
+      // Update role if matches admin rule
+      if (user.role !== assignedRole) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: assignedRole }
+        });
+      }
+    }
+
+    const tokenPayload = { id: user.id, email: user.email, name: user.name, role: user.role };
+    const accessToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      success: true,
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          avatarUrl: user.avatarUrl
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password are required' });
+    }
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    const assignedRole = determineRole(email);
+
+    if (!user) {
+      // Auto register demo accounts for convenience
+      const passwordHash = await bcrypt.hash(password, 10);
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: email.split('@')[0].toUpperCase(),
+          passwordHash,
+          role: assignedRole,
+          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`
+        }
+      });
+      await prisma.profile.create({ data: { userId: user.id } });
+    } else {
+      if (user.role !== assignedRole) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: assignedRole }
+        });
+      }
+    }
+
+    const tokenPayload = { id: user.id, email: user.email, name: user.name, role: user.role };
+    const accessToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      success: true,
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          avatarUrl: user.avatarUrl
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function getMe(req, res) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { profile: { include: { userSkills: true } } }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      data: user
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+module.exports = { googleLogin, login, getMe };
