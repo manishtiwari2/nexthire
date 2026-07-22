@@ -9,5 +9,8 @@
     "seed": "cd server && npm run seed",
     "prisma:generate": "cd server && npm run prisma:generate",
     "prisma:push": "cd server && npm run prisma:push"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
   }
 }

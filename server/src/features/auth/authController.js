@@ -12,34 +12,50 @@ function determineRole(email) {
 
 async function googleLogin(req, res) {
   try {
-    const { email, name, avatarUrl, googleId } = req.body;
+    let { credential, email, name, avatarUrl, googleId } = req.body;
+
+    if (credential) {
+      const decoded = jwt.decode(credential);
+      if (decoded) {
+        email = email || decoded.email;
+        name = name || decoded.name || decoded.given_name;
+        avatarUrl = avatarUrl || decoded.picture;
+        googleId = googleId || decoded.sub;
+      }
+    }
+
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email is required for Google auth' });
     }
 
     const assignedRole = determineRole(email);
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: { profile: { include: { userSkills: true } } }
+    });
+
     if (!user) {
       user = await prisma.user.create({
         data: {
           email,
-          name: name || email.split('@')[0],
+          name: name || email.split('@')[0].replace(/[^a-zA-Z]/g, ' ').trim() || 'User',
           avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`,
           role: assignedRole,
           googleId: googleId || `gid-${Date.now()}`
-        }
+        },
+        include: { profile: { include: { userSkills: true } } }
       });
 
       await prisma.profile.create({
         data: { userId: user.id }
       });
     } else {
-      // Update role if matches admin rule
       if (user.role !== assignedRole) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { role: assignedRole }
+          data: { role: assignedRole },
+          include: { profile: { include: { userSkills: true } } }
         });
       }
     }

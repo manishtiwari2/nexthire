@@ -7,17 +7,10 @@ import { ProtectedRoute } from './components/common/ProtectedRoute';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const RegisterPage = React.lazy(() => import('./pages/RegisterPage').then(m => ({ default: m.RegisterPage })));
-const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const QuestionBankPage = React.lazy(() => import('./pages/QuestionBankPage').then(m => ({ default: m.QuestionBankPage })));
 const LivePracticePage = React.lazy(() => import('./pages/LivePracticePage').then(m => ({ default: m.LivePracticePage })));
 const ContestsPage = React.lazy(() => import('./pages/ContestsPage').then(m => ({ default: m.ContestsPage })));
 const LiveContestIDEPage = React.lazy(() => import('./pages/LiveContestIDEPage').then(m => ({ default: m.LiveContestIDEPage })));
-const InterviewsPage = React.lazy(() => import('./pages/InterviewsPage').then(m => ({ default: m.InterviewsPage })));
-const WaitingRoomPage = React.lazy(() => import('./pages/InterviewsPage').then(m => ({ default: m.WaitingRoomPage })));
-const LiveInterviewSessionPage = React.lazy(() => import('./pages/InterviewsPage').then(m => ({ default: m.LiveInterviewSessionPage })));
-const InterviewReportPage = React.lazy(() => import('./pages/InterviewsPage').then(m => ({ default: m.InterviewReportPage })));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const AdminSuitePage = React.lazy(() => import('./pages/AdminSuitePage').then(m => ({ default: m.AdminSuitePage })));
 const ForbiddenPage = React.lazy(() => import('./pages/ForbiddenPage').then(m => ({ default: m.ForbiddenPage })));
 
 const queryClient = new QueryClient({
@@ -47,34 +40,17 @@ export const App: React.FC = () => {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/403" element={<ForbiddenPage />} />
 
-              {/* Candidate Protected Routes */}
+              {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/questions" element={<QuestionBankPage />} />
-                <Route path="/questions/:id" element={<LivePracticePage />} />
+                <Route path="/" element={<Navigate to="/contests" replace />} />
                 <Route path="/contests" element={<ContestsPage />} />
                 <Route path="/contest/:id" element={<LiveContestIDEPage />} />
-                <Route path="/interviews" element={<InterviewsPage />} />
-                <Route path="/interview/waiting-room" element={<WaitingRoomPage />} />
-                <Route path="/interview/live" element={<LiveInterviewSessionPage />} />
-                <Route path="/interview/report" element={<InterviewReportPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/settings/editor" element={<ProfilePage />} />
-                <Route path="/notifications" element={<DashboardPage />} />
-              </Route>
-
-              {/* Admin Protected Routes */}
-              <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
-                <Route path="/admin/questions" element={<AdminSuitePage />} />
-                <Route path="/admin/contests" element={<AdminSuitePage />} />
-                <Route path="/admin/contests/create" element={<AdminSuitePage />} />
-                <Route path="/admin/interviews/create" element={<AdminSuitePage />} />
-                <Route path="/admin/system-communication" element={<AdminSuitePage />} />
+                <Route path="/questions" element={<QuestionBankPage />} />
+                <Route path="/questions/:id" element={<LivePracticePage />} />
               </Route>
 
               {/* Fallback */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/contests" replace />} />
             </Routes>
           </React.Suspense>
 

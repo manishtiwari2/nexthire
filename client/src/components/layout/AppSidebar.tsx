@@ -15,25 +15,20 @@ import {
   Terminal
 } from 'lucide-react';
 
+import { useNotificationStore } from '../../store/useNotificationStore';
+
 export const AppSidebar: React.FC = () => {
   const { user } = useAuthStore();
+  const { addToast } = useNotificationStore();
   const isAdmin = user?.role === 'ADMIN';
 
   const candidateNav = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Contests', path: '/contests', icon: Trophy },
-    { name: 'Interviews', path: '/interviews', icon: Video },
-    { name: 'Question Bank', path: '/questions', icon: Database },
-    { name: 'My Profile', path: '/profile', icon: User },
-    { name: 'Settings', path: '/settings/editor', icon: Settings },
+    { name: 'DSA Assessments', path: '/contests', icon: Trophy },
+    { name: 'Question Bank', path: '/questions', icon: Database }
   ];
 
   const adminNav = [
-    { name: 'Question Bank (Admin)', path: '/admin/questions', icon: Database },
-    { name: 'Contest Management', path: '/admin/contests', icon: Trophy },
-    { name: 'Create Contest', path: '/admin/contests/create', icon: PlusCircle },
-    { name: 'Schedule Interview', path: '/admin/interviews/create', icon: Video },
-    { name: 'Broadcast Messages', path: '/admin/system-communication', icon: Send },
+    { name: 'Create Assessment', path: '/admin/contests/create', icon: PlusCircle }
   ];
 
   return (
@@ -114,7 +109,10 @@ export const AppSidebar: React.FC = () => {
           <div className="p-4 bg-primary text-white rounded-xl shadow-md">
             <p className="font-bold text-sm mb-1">Upgrade to Pro</p>
             <p className="text-xs opacity-80 mb-3">Unlimited mock interviews & editorial solutions.</p>
-            <button onClick={() => {}} className="w-full py-1.5 bg-white text-primary rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">
+            <button 
+              onClick={() => addToast('NextHire Pro', 'Pro tier plans & unlimited features are coming soon in v2.1!', 'info')} 
+              className="w-full py-1.5 bg-white text-primary rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
+            >
               Go Unlimited
             </button>
           </div>

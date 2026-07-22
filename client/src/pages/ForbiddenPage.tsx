@@ -17,10 +17,10 @@ export const ForbiddenPage: React.FC = () => {
           </p>
         </div>
         <Link
-          to="/dashboard"
+          to="/contests"
           className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-blue-700 transition-all"
         >
-          Return to Dashboard
+          Return to Assessments
         </Link>
       </div>
     </div>

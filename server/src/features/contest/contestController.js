@@ -67,6 +67,7 @@ async function createContest(req, res) {
 
     const start = startTime ? new Date(startTime) : new Date();
     const end = endTime ? new Date(endTime) : new Date(Date.now() + 7200000);
+    const generatedCode = `DSA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     const contest = await prisma.contest.create({
       data: {
@@ -84,12 +85,63 @@ async function createContest(req, res) {
             orderIndex: index,
             points: 100
           })) : []
+        },
+
+        invites: {
+          create: [
+            {
+              code: generatedCode,
+              creatorId: req.user.id
+            }
+          ]
         }
       },
-      include: { questions: { include: { question: true } } }
+      include: {
+        questions: { include: { question: true } },
+        invites: true
+      }
     });
 
-    res.status(201).json({ success: true, data: contest });
+    res.status(201).json({ success: true, data: { ...contest, joinCode: generatedCode } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+async function joinByCode(req, res) {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Join code is required' });
+    }
+
+    const invite = await prisma.contestInvite.findUnique({
+      where: { code: code.trim().toUpperCase() },
+      include: { contest: true }
+    });
+
+    if (!invite) {
+      return res.status(404).json({ success: false, error: 'Invalid assessment join code' });
+    }
+
+    const contestId = invite.contestId;
+    const participant = await prisma.contestParticipant.upsert({
+      where: { contestId_userId: { contestId, userId: req.user.id } },
+      update: {
+        startedAt: new Date(),
+        lastHeartbeatAt: new Date()
+      },
+      create: {
+        contestId,
+        userId: req.user.id,
+        startedAt: new Date(),
+        lastHeartbeatAt: new Date(),
+        score: 0,
+        penalty: 0
+      }
+    });
+
+    res.json({ success: true, data: { contestId, participant, contest: invite.contest } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -183,7 +235,7 @@ async function createContestInvite(req, res) {
   try {
     const contestId = req.params.id;
     const { maxUses, expiresAt } = req.body;
-    const code = `INVITE-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const code = `DSA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     const invite = await prisma.contestInvite.create({
       data: {
@@ -259,6 +311,7 @@ module.exports = {
   getContestById,
   createContest,
   joinContest,
+  joinByCode,
   recordHeartbeat,
   getContestLeaderboard,
   createContestInvite,

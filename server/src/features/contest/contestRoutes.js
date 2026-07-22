@@ -4,6 +4,7 @@ const {
   getContestById,
   createContest,
   joinContest,
+  joinByCode,
   recordHeartbeat,
   getContestLeaderboard,
   createContestInvite,
@@ -14,6 +15,7 @@ const { requireAuthenticated, requireAdmin, requireContestHost } = require('../a
 const router = express.Router();
 
 router.get('/', getContests);
+router.post('/join-by-code', requireAuthenticated, joinByCode);
 router.get('/:id', getContestById);
 router.get('/:id/leaderboard', getContestLeaderboard);
 router.post('/', requireAuthenticated, requireAdmin, createContest);

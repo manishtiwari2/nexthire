@@ -17,7 +17,7 @@ export const LoginPage: React.FC = () => {
           <p className="text-xs text-on-surface-variant">Sign in with Google OAuth to access candidate features or admin tools.</p>
         </div>
 
-        <GoogleLoginForm onSuccess={() => navigate('/dashboard')} />
+        <GoogleLoginForm onSuccess={() => navigate('/contests')} />
       </div>
     </div>
   );
