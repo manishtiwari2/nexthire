@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.post('/google', googleLogin);
 router.post('/login', login);
+router.post('/register', login);  // Register uses same logic as login (auto-creates)
 router.get('/me', requireAuthenticated, getMe);
 
 module.exports = router;

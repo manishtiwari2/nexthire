@@ -54,7 +54,7 @@ export const DashboardPage: React.FC = () => {
             <Link to="/questions" className="px-6 py-3 bg-white text-primary font-bold rounded-xl shadow-md hover:bg-slate-50 transition-all">
               Practice Questions
             </Link>
-            <Link to="/contest/live" className="px-6 py-3 bg-white/10 backdrop-blur-md border border-white/30 text-white font-bold rounded-xl hover:bg-white/20 transition-all">
+            <Link to="/contests" className="px-6 py-3 bg-white/10 backdrop-blur-md border border-white/30 text-white font-bold rounded-xl hover:bg-white/20 transition-all">
               Join Live Contest
             </Link>
           </div>
@@ -127,7 +127,7 @@ export const DashboardPage: React.FC = () => {
                       <p className="text-xs text-on-surface-variant">{c.description}</p>
                     </div>
                     <Link
-                      to="/contest/live"
+                      to={`/contest/${c.id}`}
                       className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl shadow-sm hover:bg-blue-700 transition-all"
                     >
                       Join Contest
