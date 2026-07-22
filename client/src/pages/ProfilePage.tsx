@@ -76,107 +76,108 @@ export const ProfilePage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Profile Overview Card */}
             <div className="bg-white p-6 rounded-3xl border border-outline-variant shadow-sm space-y-6 text-center">
-            <img
-              src={profile?.user?.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex'}
-              alt="Avatar"
-              className="w-24 h-24 rounded-full border-4 border-primary-container mx-auto object-cover"
-            />
-            <div>
-              <h2 className="font-bold text-xl text-on-surface">{profile?.user?.name || 'Alex Rivera'}</h2>
-              <p className="text-xs text-slate-500">{profile?.user?.email}</p>
+              <img
+                src={profile?.user?.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex'}
+                alt="Avatar"
+                className="w-24 h-24 rounded-full border-4 border-primary-container mx-auto object-cover"
+              />
+              <div>
+                <h2 className="font-bold text-xl text-on-surface">{profile?.user?.name || 'User'}</h2>
+                <p className="text-xs text-slate-500">{profile?.user?.email}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-blue-50 text-blue-900 rounded-xl font-bold">
+                  <p className="text-[10px] text-blue-600 uppercase">Skills</p>
+                  <p className="text-lg">{profile?.userSkills?.length ?? '—'}</p>
+                </div>
+                <div className="p-3 bg-amber-50 text-amber-900 rounded-xl font-bold">
+                  <p className="text-[10px] text-amber-600 uppercase">Profile</p>
+                  <p className="text-lg">{profile?.bio ? '✓' : '—'}</p>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-blue-50 text-blue-900 rounded-xl font-bold">
-                <p className="text-[10px] text-blue-600 uppercase">Global Rank</p>
-                <p className="text-lg">#{profile?.rank || '—'}</p>
-              </div>
-              <div className="p-3 bg-amber-50 text-amber-900 rounded-xl font-bold">
-                <p className="text-[10px] text-amber-600 uppercase">Streak</p>
-                <p className="text-lg">{profile?.streak || '—'}</p>
-              </div>
-            </div>
-          </div>
+            {/* Edit Profile Form */}
+            <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-outline-variant shadow-sm space-y-6">
+              <h3 className="font-bold text-lg text-on-surface pb-3 border-b border-outline-variant">Edit Personal Info</h3>
 
-          {/* Edit Profile Form */}
-          <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-outline-variant shadow-sm space-y-6">
-            <h3 className="font-bold text-lg text-on-surface pb-3 border-b border-outline-variant">Edit Personal Info</h3>
+              {savedMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" /> Profile updated successfully!
+                </div>
+              )}
 
-            {savedMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-600" /> Profile updated successfully!
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Display Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Bio</label>
-                <textarea
-                  rows={3}
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleSubmit} className="space-y-4 text-xs">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Github className="w-3.5 h-3.5" /> GitHub Profile URL
-                  </label>
+                  <label className="font-bold text-slate-700">Display Name</label>
                   <input
-                    type="url"
-                    value={githubUrl}
-                    onChange={(e) => setGithubUrl(e.target.value)}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Linkedin className="w-3.5 h-3.5" /> LinkedIn Profile URL
-                  </label>
-                  <input
-                    type="url"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
+                  <label className="font-bold text-slate-700">Bio</label>
+                  <textarea
+                    rows={3}
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
                     className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Skills (Comma-separated)</label>
-                <input
-                  type="text"
-                  value={skills}
-                  onChange={(e) => setSkills(e.target.value)}
-                  className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
-                  placeholder="Python, JavaScript, Algorithms, System Design"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 flex items-center gap-1">
+                      <Github className="w-3.5 h-3.5" /> GitHub Profile URL
+                    </label>
+                    <input
+                      type="url"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
+                    />
+                  </div>
 
-              <div className="pt-4 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={updateMutation.isPending}
-                  className="px-6 py-2.5 bg-primary hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{updateMutation.isPending ? 'Saving...' : 'Save Profile Changes'}</span>
-                </button>
-              </div>
-            </form>
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 flex items-center gap-1">
+                      <Linkedin className="w-3.5 h-3.5" /> LinkedIn Profile URL
+                    </label>
+                    <input
+                      type="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Skills (Comma-separated)</label>
+                  <input
+                    type="text"
+                    value={skills}
+                    onChange={(e) => setSkills(e.target.value)}
+                    className="w-full border border-outline-variant p-2.5 rounded-xl outline-none"
+                    placeholder="Python, JavaScript, Algorithms, System Design"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={updateMutation.isPending}
+                    className="px-6 py-2.5 bg-primary hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{updateMutation.isPending ? 'Saving...' : 'Save Profile Changes'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </main>

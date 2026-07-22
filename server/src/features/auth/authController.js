@@ -1,5 +1,4 @@
 const { prisma } = require('../../shared/db');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('./authMiddleware');
 
@@ -22,7 +21,6 @@ async function googleLogin(req, res) {
 
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      const randomPassword = await bcrypt.hash(`google-oauth-${Date.now()}`, 10);
       user = await prisma.user.create({
         data: {
           email,
@@ -70,21 +68,19 @@ async function googleLogin(req, res) {
 async function login(req, res) {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, error: 'Email and password are required' });
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
     }
 
     let user = await prisma.user.findUnique({ where: { email } });
     const assignedRole = determineRole(email);
 
     if (!user) {
-      // Auto register demo accounts for convenience
-      const passwordHash = await bcrypt.hash(password, 10);
+      // Auto-create account for demo convenience
       user = await prisma.user.create({
         data: {
           email,
-          name: email.split('@')[0].toUpperCase(),
-          passwordHash,
+          name: email.split('@')[0].replace(/[^a-zA-Z]/g, ' ').trim() || 'User',
           role: assignedRole,
           avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`
         }
