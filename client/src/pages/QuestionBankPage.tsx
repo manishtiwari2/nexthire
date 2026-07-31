@@ -36,9 +36,11 @@ export const QuestionBankPage: React.FC = () => {
     }
   });
 
-  const questions = data?.data || [];
-  const pagination = data?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1 };
-  const topics = topicsData?.data || [];
+  // apiClient's response interceptor unwraps to the API envelope { success, data, pagination },
+  // so `data` here is the body, not an AxiosResponse.
+  const questions = (data as any)?.data || [];
+  const pagination = (data as any)?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1 };
+  const topics = (topicsData as any)?.data || [];
 
   return (
     <div className="min-h-screen bg-surface">

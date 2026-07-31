@@ -16,7 +16,8 @@ const router = express.Router();
 
 router.get('/', getContests);
 router.post('/join-by-code', requireAuthenticated, joinByCode);
-router.get('/:id', getContestById);
+// Detail read is authenticated so invite codes can be scoped to host/admin (see controller).
+router.get('/:id', requireAuthenticated, getContestById);
 router.get('/:id/leaderboard', getContestLeaderboard);
 router.post('/', requireAuthenticated, requireAdmin, createContest);
 router.post('/:id/join', requireAuthenticated, joinContest);

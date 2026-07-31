@@ -20,6 +20,12 @@ function initSockets(io) {
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id} (User: ${socket.user?.name || 'unknown'})`);
 
+    // Auto-join the user's private room so the judge worker can push submission verdicts
+    // (relayed from the worker process over Redis) to exactly this user's clients.
+    if (socket.user?.id) {
+      socket.join(`user:${socket.user.id}`);
+    }
+
     // Join room (e.g. NH-LIVE-8821 or contest ID)
     socket.on('join-room', ({ roomCode, userName }) => {
       try {

@@ -67,9 +67,9 @@ export const SubmissionHistoryPanel: React.FC<SubmissionHistoryPanelProps> = ({
 
               {exec && (
                 <div className="flex items-center gap-4 text-[11px] font-mono text-slate-500 pt-1 border-t border-slate-200/60">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-primary" /> {exec.executionTime || 12}ms</span>
-                  <span className="flex items-center gap-1"><Cpu className="w-3 h-3 text-primary" /> {exec.memoryUsed || 8.4}MB</span>
-                  <span>Passed {exec.passCount}/{exec.totalTestCases} Tests</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-primary" /> {exec.executionTime != null ? `${exec.executionTime}ms` : '—'}</span>
+                  <span className="flex items-center gap-1"><Cpu className="w-3 h-3 text-primary" /> {exec.memoryUsed != null ? `${exec.memoryUsed}MB` : '—'}</span>
+                  <span>Passed {exec.passCount ?? 0}/{exec.totalTestCases ?? 0} Tests</span>
                 </div>
               )}
 

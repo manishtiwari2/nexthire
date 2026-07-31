@@ -8,8 +8,11 @@ require('dotenv').config();
 const authRoutes = require('./features/auth/authRoutes');
 const questionRoutes = require('./features/question-bank/questionRoutes');
 const contestRoutes = require('./features/contest/contestRoutes');
+const submissionRoutes = require('./features/submission/submissionRoutes');
 const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
+const { initJudgeEventRelay } = require('./features/judge/judgeEvents');
+const { reconcilePendingSubmissions } = require('./features/judge/reconcile');
 const { prisma } = require('./shared/db');
 
 const app = express();
@@ -30,6 +33,17 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // WebSockets
 initSockets(io);
 
+// Relay judge verdicts published by the (separate) worker process to the submitter's room.
+// Non-fatal if Redis is unavailable — the frontend falls back to polling.
+try {
+  initJudgeEventRelay(io);
+} catch (err) {
+  console.error('[judge] event relay init failed:', err.message);
+}
+
+// Safety net: re-enqueue any submissions left PENDING (e.g. enqueued just before a crash).
+reconcilePendingSubmissions().catch((err) => console.error('[judge] reconcile failed:', err.message));
+
 // Health Check & OpenAPI Docs
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'NextHire Production REST API (v1)', timestamp: new Date().toISOString() });
@@ -42,11 +56,13 @@ if (process.env.NODE_ENV !== 'production') {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/questions', questionRoutes);
 app.use('/api/v1/contests', contestRoutes);
+app.use('/api/v1/submissions', submissionRoutes);
 
 // Backward-compatible aliases
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/contests', contestRoutes);
+app.use('/api/submissions', submissionRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

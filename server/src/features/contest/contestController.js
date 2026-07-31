@@ -1,5 +1,5 @@
 const { prisma } = require('../../shared/db');
-const { judgeQueueInstance } = require('../judge/InMemoryJudgeQueue');
+const { judgeQueueInstance } = require('../judge/judgeQueue');
 
 // Helper to update contest status based on time
 async function updateContestStatuses() {
@@ -49,6 +49,13 @@ async function getContestById(req, res) {
 
     if (!contest) {
       return res.status(404).json({ success: false, error: 'Contest not found' });
+    }
+
+    // Security: invite codes are privileged join secrets — expose them only to the
+    // contest host or an admin. Other participants receive the contest without invites.
+    const isHostOrAdmin = req.user && (contest.hostId === req.user.id || req.user.role === 'ADMIN');
+    if (!isHostOrAdmin) {
+      contest.invites = [];
     }
 
     res.json({ success: true, data: contest });
