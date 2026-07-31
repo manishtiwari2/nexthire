@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { AppHeader } from '../components/layout/AppHeader';
@@ -57,9 +58,11 @@ export const QuestionBankPage: React.FC = () => {
           </div>
 
           {isAdmin && (
-            <Button variant="primary" className="bg-purple-600 hover:bg-purple-700">
-              <Plus className="w-4 h-4" /> Add Question (Admin)
-            </Button>
+            <Link to="/admin/questions/create">
+              <Button variant="primary" className="bg-purple-600 hover:bg-purple-700">
+                <Plus className="w-4 h-4" /> Add Question (Admin)
+              </Button>
+            </Link>
           )}
         </div>
 

@@ -13,6 +13,7 @@ const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
 const { initJudgeEventRelay } = require('./features/judge/judgeEvents');
 const { reconcilePendingSubmissions } = require('./features/judge/reconcile');
+const { updateContestStatuses } = require('./features/contest/contestController');
 const { prisma } = require('./shared/db');
 
 const app = express();
@@ -43,6 +44,15 @@ try {
 
 // Safety net: re-enqueue any submissions left PENDING (e.g. enqueued just before a crash).
 reconcilePendingSubmissions().catch((err) => console.error('[judge] reconcile failed:', err.message));
+
+// Contest lifecycle: flip UPCOMING→LIVE→ENDED on schedule so a contest ends automatically
+// when its timer expires, even if nobody is reading it. Reads still reconcile lazily too.
+const CONTEST_SWEEP_MS = Number(process.env.CONTEST_SWEEP_MS) || 30000;
+updateContestStatuses().catch((err) => console.error('[contest] status sweep failed:', err.message));
+const contestSweep = setInterval(() => {
+  updateContestStatuses().catch((err) => console.error('[contest] status sweep failed:', err.message));
+}, CONTEST_SWEEP_MS);
+if (contestSweep.unref) contestSweep.unref();
 
 // Health Check & OpenAPI Docs
 app.get('/api/health', (req, res) => {

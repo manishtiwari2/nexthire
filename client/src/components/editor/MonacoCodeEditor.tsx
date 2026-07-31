@@ -12,16 +12,15 @@ interface MonacoCodeEditorProps {
   roomCode?: string;
   contestId?: string;
   onSubmitted?: () => void;
+  /** When set, Run/Submit are disabled (e.g. the contest has ended) and this reason is shown. */
+  disabledReason?: string;
 }
 
 // Maps our editor language ids to Monaco's built-in language ids.
 const MONACO_LANGUAGE_MAP: Record<SupportedLanguage, string> = {
   python: 'python',
-  javascript: 'javascript',
-  typescript: 'typescript',
   cpp: 'cpp',
-  java: 'java',
-  go: 'go'
+  java: 'java'
 };
 
 const PHASE_LABEL: Record<JudgePhase, string> = {
@@ -32,13 +31,14 @@ const PHASE_LABEL: Record<JudgePhase, string> = {
   DONE: ''
 };
 
-export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted }) => {
+export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted, disabledReason }) => {
   const {
     language, theme, fontSize, code, isExecuting, phase, result,
     setLanguage, setTheme, setCode, setIsExecuting, setPhase, setResult
   } = useEditorStore();
   const socketRef = useRef<Socket | null>(null);
   const { addToast } = useNotificationStore();
+  const locked = Boolean(disabledReason);
   const busy = isExecuting;
 
   // Live collaboration socket (only when inside a room). Authenticated so the server accepts it.
@@ -69,6 +69,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
   // Shared run/submit flow. The verdict comes entirely from the real judge — via Socket.IO
   // events when available, falling back to polling — never fabricated on the client.
   const runJudge = async (endpoint: string) => {
+    if (locked) {
+      addToast('Submissions Closed', disabledReason || 'This session is no longer accepting code.', 'warning');
+      return;
+    }
     if (!questionId) {
       addToast('No Question Selected', 'Open a coding question to run against its test cases.', 'warning');
       return;
@@ -115,9 +119,6 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             <option value="python">Python 3.10</option>
             <option value="cpp">C++ 20 (GCC)</option>
             <option value="java">Java 17 (OpenJDK)</option>
-            <option value="javascript">JavaScript (Node.js)</option>
-            <option value="typescript">TypeScript</option>
-            <option value="go">Go 1.21</option>
           </select>
 
           <select
@@ -147,8 +148,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
 
           <button
             onClick={handleRunCode}
-            disabled={busy}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 border border-slate-700"
+            disabled={busy || locked}
+            title={locked ? disabledReason : undefined}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700"
           >
             <Play className="w-3.5 h-3.5 fill-current text-blue-400" />
             <span>{busy ? 'Judging…' : 'Run Code'}</span>
@@ -156,14 +158,22 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
 
           <button
             onClick={handleSubmitCode}
-            disabled={busy}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            disabled={busy || locked}
+            title={locked ? disabledReason : undefined}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-3.5 h-3.5" />
             <span>{busy ? 'Judging…' : 'Submit Code'}</span>
           </button>
         </div>
       </div>
+
+      {/* Locked banner (e.g. contest ended) */}
+      {locked && (
+        <div className="border-b border-red-900/50 bg-red-950/40 px-4 py-2 text-[11px] font-bold text-red-300 flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5" /> {disabledReason}
+        </div>
+      )}
 
       {/* Monaco Surface */}
       <div className="flex-1 min-h-[350px]">

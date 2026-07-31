@@ -223,7 +223,10 @@ export const LivePracticePage: React.FC = () => {
 
         {/* Right: Monaco Editor */}
         <div className="w-[55%] h-full">
-          <MonacoCodeEditor questionId={id} />
+          <MonacoCodeEditor
+            questionId={id}
+            onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['submissions', id] })}
+          />
         </div>
       </div>
     </div>

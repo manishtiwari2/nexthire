@@ -28,6 +28,7 @@ export const AppSidebar: React.FC = () => {
   ];
 
   const adminNav = [
+    { name: 'Create Question', path: '/admin/questions/create', icon: Database },
     { name: 'Create Assessment', path: '/admin/contests/create', icon: PlusCircle }
   ];
 

@@ -1,16 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { MonacoCodeEditor } from '../components/editor/MonacoCodeEditor';
 import { ContestLeaderboard } from '../features/contest/components/ContestLeaderboard';
-import { ArrowLeft, Trophy, Clock, Send, FileText } from 'lucide-react';
-import { Button } from '../shared/components/ui/Button';
+import { ArrowLeft, Trophy, Clock, FileText } from 'lucide-react';
+
+// Format a millisecond countdown as H:MM:SS (or MM:SS under an hour).
+function formatRemaining(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
 
 export const LiveContestIDEPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<'problem' | 'leaderboard'>('problem');
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  const joinedRef = useRef(false);
   const queryClient = useQueryClient();
 
   const { data: contestData, isLoading, isError: isContestError } = useQuery({
@@ -25,10 +36,55 @@ export const LiveContestIDEPage: React.FC = () => {
     refetchInterval: 5000 // Poll leaderboard every 5s
   });
 
+  // Register the current user as a participant on entry so they can submit and appear on
+  // the leaderboard (the join-by-code path also does this; this covers direct entry).
+  const joinMutation = useMutation({
+    mutationFn: () => apiClient.post(`/contests/${id}/join`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] })
+  });
+
   const contest = contestData?.data;
   const questions = contest?.questions || [];
   const activeContestQuestion = questions[selectedQuestionIndex]?.question;
   const leaderboard = leaderboardData?.data || [];
+
+  // Tick every second to drive the live countdown.
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Auto-join once, when the contest is loaded and still joinable.
+  useEffect(() => {
+    if (!id || joinedRef.current || !contest) return;
+    if (contest.status === 'ENDED') return;
+    joinedRef.current = true;
+    joinMutation.mutate();
+  }, [id, contest]);
+
+  // Timing: the endTime is authoritative. When it passes, the contest is over.
+  const startMs = contest?.startTime ? new Date(contest.startTime).getTime() : null;
+  const endMs = contest?.endTime ? new Date(contest.endTime).getTime() : null;
+  const notStarted = startMs != null && nowTs < startMs;
+  const hasEnded = contest?.status === 'ENDED' || (endMs != null && nowTs >= endMs);
+  const remainingMs = endMs != null ? endMs - nowTs : 0;
+
+  // When the timer reaches zero, refresh contest + leaderboard so the server-side ENDED
+  // status and final standings are reflected.
+  const endedHandledRef = useRef(false);
+  useEffect(() => {
+    if (hasEnded && !endedHandledRef.current && contest) {
+      endedHandledRef.current = true;
+      queryClient.invalidateQueries({ queryKey: ['contest', id] });
+      queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] });
+    }
+  }, [hasEnded, contest, id, queryClient]);
+
+  const editorDisabledReason = hasEnded
+    ? 'This contest has ended — submissions are closed.'
+    : notStarted
+      ? 'This contest has not started yet.'
+      : undefined;
 
   return (
     <div className="h-screen flex flex-col bg-surface overflow-hidden">
@@ -43,9 +99,24 @@ export const LiveContestIDEPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <span className="px-3 py-1 bg-red-600 text-white text-xs font-mono font-bold rounded-full animate-pulse flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" /> LIVE SESSION
-          </span>
+          {hasEnded ? (
+            <span className="px-3 py-1 bg-slate-700 text-white text-xs font-mono font-bold rounded-full flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> CONTEST ENDED
+            </span>
+          ) : notStarted ? (
+            <span className="px-3 py-1 bg-blue-600 text-white text-xs font-mono font-bold rounded-full flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> STARTS SOON
+            </span>
+          ) : (
+            <span
+              className={`px-3 py-1 text-white text-xs font-mono font-bold rounded-full flex items-center gap-1.5 ${
+                remainingMs <= 60000 ? 'bg-red-600 animate-pulse' : 'bg-emerald-600'
+              }`}
+              title="Time remaining"
+            >
+              <Clock className="w-3.5 h-3.5" /> {endMs != null ? formatRemaining(remainingMs) : 'LIVE'}
+            </span>
+          )}
         </div>
       </header>
 
@@ -86,7 +157,7 @@ export const LiveContestIDEPage: React.FC = () => {
                     selectedQuestionIndex === idx ? 'bg-primary text-white shadow-sm' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
-                  Problem {idx + 1} (100 pts)
+                  Problem {idx + 1} ({cq.points ?? 100} pts)
                 </button>
               ))}
             </div>
@@ -127,10 +198,11 @@ export const LiveContestIDEPage: React.FC = () => {
         </div>
 
         {/* Right Side: Monaco Editor */}
-          <MonacoCodeEditor 
-            questionId={activeContestQuestion?.id} 
-            roomCode={`CONTEST-${id}`} 
+          <MonacoCodeEditor
+            questionId={activeContestQuestion?.id}
+            roomCode={`CONTEST-${id}`}
             contestId={id}
+            disabledReason={editorDisabledReason}
             onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] })}
           />
       </div>

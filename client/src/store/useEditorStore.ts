@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
-export type SupportedLanguage = 'python' | 'javascript' | 'typescript' | 'cpp' | 'java' | 'go';
+// Only languages the backend judge can actually execute are offered, so a chosen language
+// always yields a real verdict (never a spurious INTERNAL_ERROR for an unsupported runtime).
+export type SupportedLanguage = 'python' | 'cpp' | 'java';
 export type EditorTheme = 'vs-dark' | 'light' | 'nord';
 
 // Lifecycle phases surfaced in the IDE while the judge works. Driven by Socket.IO events

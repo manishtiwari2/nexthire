@@ -1,5 +1,6 @@
 const { prisma } = require('../../shared/db');
 const { judgeQueueInstance } = require('../judge/judgeQueue');
+const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
 
 async function getQuestions(req, res) {
   try {
@@ -204,10 +205,19 @@ async function submitCodeExecution(req, res) {
   try {
     const { code, language, context, contestId, interviewId } = req.body;
     const questionId = req.params.id;
+    const normalizedLanguage = (language || 'PYTHON').toUpperCase();
 
     const question = await prisma.question.findUnique({ where: { id: questionId } });
     if (!question) {
       return res.status(404).json({ success: false, error: 'Question not found' });
+    }
+
+    // Only accept languages the judge can actually execute, so the verdict is honest.
+    if (!isLanguageSupported(normalizedLanguage)) {
+      return res.status(400).json({
+        success: false,
+        error: `Language "${normalizedLanguage}" is not supported. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`
+      });
     }
 
     const submission = await prisma.submission.create({
@@ -218,7 +228,7 @@ async function submitCodeExecution(req, res) {
         contestId: contestId || null,
         interviewId: interviewId || null,
         code,
-        language: (language || 'PYTHON').toUpperCase(),
+        language: normalizedLanguage,
         status: 'PENDING'
       }
     });
@@ -227,7 +237,7 @@ async function submitCodeExecution(req, res) {
       submissionId: submission.id,
       questionId: question.id,
       code,
-      language: (language || 'PYTHON').toUpperCase(),
+      language: normalizedLanguage,
       timeLimitMs: question.timeLimitMs,
       memoryLimitMb: question.memoryLimitMb
     });
