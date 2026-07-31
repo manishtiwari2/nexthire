@@ -52,8 +52,11 @@ enum SubmissionStatus {
   WRONG_ANSWER
   TIME_LIMIT_EXCEEDED
   MEMORY_LIMIT_EXCEEDED
+  OUTPUT_LIMIT_EXCEEDED
   COMPILATION_ERROR
   RUNTIME_ERROR
+  INTERNAL_ERROR
+  CANCELLED
 }
 
 enum SubmissionContext {
@@ -393,12 +396,21 @@ model ExecutionResult {
   submissionId   String
   submission     Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   status         SubmissionStatus @default(PENDING)
+  language       Language?
   executionTime  Float?
   memoryUsed     Float?
   passCount      Int              @default(0)
   totalTestCases Int              @default(0)
   compilerOutput String?
+  runtimeOutput  String?
+  stderr         String?
+  exitCode       Int?
+  // Per-test breakdown: [{ index, isSample, verdict, executionTime, memoryUsed, exitCode, stdout, stderr, expectedOutput }].
+  // Hidden (non-sample) case I/O is stripped by the API DTO before it reaches non-admin clients.
+  testResults    Json?
   judgedAt       DateTime         @default(now())
+
+  @@index([submissionId])
 }
 
 // ==========================================

@@ -13,5 +13,34 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: nexthire-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # Judge worker: consumes the BullMQ queue and executes submissions inside Docker.
+  # It needs access to the host Docker daemon to spawn per-submission sandbox containers,
+  # so the Docker socket is mounted read-only. Run one or more replicas to scale throughput.
+  judge-worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: nexthire-judge-worker
+    command: ["npm", "run", "worker"]
+    environment:
+      DATABASE_URL: "postgresql://nexthire:nexthire_password@postgres:5432/nexthire_db?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JUDGE_CONCURRENCY: "4"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - postgres
+      - redis
+
 volumes:
   pgdata:
+  redisdata:

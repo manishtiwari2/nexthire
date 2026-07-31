@@ -1,5 +1,5 @@
 const { prisma } = require('../../shared/db');
-const { judgeQueueInstance } = require('../judge/InMemoryJudgeQueue');
+const { judgeQueueInstance } = require('../judge/judgeQueue');
 
 async function getQuestions(req, res) {
   try {
@@ -76,6 +76,12 @@ async function getQuestionById(req, res) {
 
     if (!question) {
       return res.status(404).json({ success: false, error: 'Question not found' });
+    }
+
+    // Security: never expose hidden (non-sample) test cases to solvers. Only admins
+    // (who author/maintain questions) may see the full hidden test suite.
+    if (req.user?.role !== 'ADMIN') {
+      question.testCases = (question.testCases || []).filter((tc) => tc.isSample);
     }
 
     res.json({ success: true, data: question });
@@ -248,6 +254,11 @@ async function getSubmissionResult(req, res) {
 
     if (!submission) {
       return res.status(404).json({ success: false, error: 'Submission not found' });
+    }
+
+    // Security (IDOR): a user may only read their own submissions; admins may read any.
+    if (submission.userId !== req.user.id && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Not authorized to view this submission' });
     }
 
     res.json({ success: true, data: submission });

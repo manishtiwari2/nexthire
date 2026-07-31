@@ -16,7 +16,8 @@ const router = express.Router();
 
 router.get('/topics', getTopics);
 router.get('/', getQuestions);
-router.get('/:id', getQuestionById);
+// Detail read is authenticated so hidden test cases can be scoped by role (see controller).
+router.get('/:id', requireAuthenticated, getQuestionById);
 router.get('/:id/submissions', requireAuthenticated, getUserSubmissionsForQuestion);
 router.post('/', requireAuthenticated, requireAdmin, createQuestion);
 router.put('/:id', requireAuthenticated, requireAdmin, updateQuestion);

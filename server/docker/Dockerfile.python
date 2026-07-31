@@ -1,0 +1,9 @@
+# Sandbox runner image for Python submissions.
+# Build:  docker build -t nexthire-judge-python -f docker/Dockerfile.python .
+# Then point JUDGE_IMAGE_PYTHON=nexthire-judge-python (optional; the default is python:3.10-slim).
+FROM python:3.10-slim
+
+# Unprivileged user the sandboxed process runs as (matches --user 1000:1000 in the executor).
+RUN useradd -u 1000 -m runner
+USER runner
+WORKDIR /judge
