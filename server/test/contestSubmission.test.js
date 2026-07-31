@@ -5,7 +5,7 @@ const assert = require('node:assert');
 // so no real DB / Redis is touched. These tests lock in the contest-window and language
 // guards that make "the contest ends when the timer expires" real on the server.
 const db = require('../src/shared/db');
-const { judgeQueueInstance } = require('../src/features/judge/judgeQueue');
+const judgeDispatch = require('../src/features/judge/judgeDispatch');
 
 const HOUR = 3600 * 1000;
 let contest; // mutated per test
@@ -18,7 +18,9 @@ db.prisma.contestParticipant = {
   update: async () => ({})
 };
 db.prisma.submission = { create: async (args) => ({ id: 's1', ...args.data }) };
-judgeQueueInstance.enqueueJob = async () => 'job1';
+// Stub the judge dispatch seam so these guard tests never touch the queue OR the inline path,
+// regardless of the JUDGE_INLINE env flag.
+judgeDispatch.dispatchJudgeJob = async () => 'job1';
 
 const { submitContestCode } = require('../src/features/contest/contestController');
 

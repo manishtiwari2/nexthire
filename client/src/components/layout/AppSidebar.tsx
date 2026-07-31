@@ -1,10 +1,8 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useNotificationStore } from '../../store/useNotificationStore';
 import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X } from 'lucide-react';
 import { cn } from '../../shared/lib/cn';
-import { Button } from '../../shared/components/ui';
 
 interface NavItem {
   name: string;
@@ -56,7 +54,6 @@ const NavSection: React.FC<{ label: React.ReactNode; items: NavItem[]; onNavigat
 
 export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
   const { user } = useAuthStore();
-  const { addToast } = useNotificationStore();
   const isAdmin = user?.role === 'ADMIN';
 
   return (
@@ -109,18 +106,11 @@ export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
             <p className="mt-0.5 text-[11px] leading-snug text-on-surface-variant">Full question & assessment management enabled.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-primary/20 bg-primary/8 p-3.5">
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-on-surface">
-              <Sparkles className="h-4 w-4 text-primary" /> NextHire Pro
+          <div className="rounded-xl border border-primary/20 bg-primary/8 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-on-surface">
+              <Sparkles className="h-3.5 w-3.5 text-primary" /> Candidate workspace
             </p>
-            <p className="mt-0.5 mb-2.5 text-[11px] leading-snug text-on-surface-variant">Unlimited mock interviews & editorial solutions.</p>
-            <Button
-              size="sm"
-              fullWidth
-              onClick={() => addToast('NextHire Pro', 'Pro tier plans are coming soon in v2.1!', 'info')}
-            >
-              Go Unlimited
-            </Button>
+            <p className="mt-0.5 text-[11px] leading-snug text-on-surface-variant">Practice DSA problems and join live assessments.</p>
           </div>
         )}
       </div>

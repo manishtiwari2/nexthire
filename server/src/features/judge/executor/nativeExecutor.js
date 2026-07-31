@@ -16,6 +16,22 @@ const { VERDICT, determineVerdict } = require('./verdict');
 
 const OUTPUT_CAP_BYTES = 1 * 1024 * 1024;
 
+// The language configs are written for the Linux Docker sandbox (python3, ./main). The native
+// fallback runs on the developer's host instead, so translate the few commands that differ per
+// OS. Windows typically ships Python as `python` (not `python3`) and needs an explicit .exe.
+const IS_WIN = process.platform === 'win32';
+const HOST_PYTHON = process.env.JUDGE_PYTHON_BIN || (IS_WIN ? 'python' : 'python3');
+
+function hostArgv(argv) {
+  if (!Array.isArray(argv)) return argv;
+  return argv.map((arg, i) => {
+    if (i === 0 && arg === 'python3') return HOST_PYTHON;
+    if (IS_WIN && arg === './main') return '.\\main.exe';
+    if (IS_WIN && arg === 'main') return 'main.exe'; // g++ -o target
+    return arg;
+  });
+}
+
 function runProcess({ argv, cwd, stdin, timeoutMs }) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -88,7 +104,7 @@ async function executeSubmission(job, testCases) {
     const compileCmd = cfg.compile || cfg.syntaxCheck;
     let compilerOutput = '';
     if (compileCmd) {
-      const compile = await runProcess({ argv: compileCmd, cwd: workDir, stdin: '', timeoutMs: 15000 });
+      const compile = await runProcess({ argv: hostArgv(compileCmd), cwd: workDir, stdin: '', timeoutMs: 15000 });
       compilerOutput = (compile.stderr || compile.stdout || '').trim();
       if (compile.exitCode !== 0) {
         return {
@@ -107,7 +123,7 @@ async function executeSubmission(job, testCases) {
 
     for (let i = 0; i < cases.length; i++) {
       const tc = cases[i];
-      const run = await runProcess({ argv: cfg.run, cwd: workDir, stdin: tc.input ?? '', timeoutMs: timeLimitMs });
+      const run = await runProcess({ argv: hostArgv(cfg.run), cwd: workDir, stdin: tc.input ?? '', timeoutMs: timeLimitMs });
       const verdict = determineVerdict(run, tc.expectedOutput ?? '');
       maxTime = Math.max(maxTime, run.durationMs);
       if (run.memoryMb != null) maxMem = Math.max(maxMem || 0, run.memoryMb);

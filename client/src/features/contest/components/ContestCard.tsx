@@ -5,13 +5,14 @@ import { Card, Badge, Button } from '../../../shared/components/ui';
 
 interface ContestCardProps {
   contest: any;
-  onJoin?: (id: string) => void;
 }
 
 export const ContestCard: React.FC<ContestCardProps> = ({ contest }) => {
   const isLive = contest.status === 'LIVE';
   const isEnded = contest.status === 'ENDED';
-  const joinCode = contest.invites?.[0]?.code || contest.joinCode || 'DSA-SESSION';
+  // The invite code is only present for the host/admin (the API strips it for others), so we
+  // only render the code chip when a real code exists — never a fabricated placeholder.
+  const joinCode = contest.invites?.[0]?.code || contest.joinCode || null;
 
   const statusVariant = isLive ? 'danger' : isEnded ? 'default' : 'info';
   const startLabel = contest.startTime
@@ -25,9 +26,11 @@ export const ContestCard: React.FC<ContestCardProps> = ({ contest }) => {
           <Badge variant={statusVariant} dot pulse={isLive}>
             {contest.status}
           </Badge>
-          <span className="inline-flex items-center gap-1 rounded-lg border border-outline-variant bg-surface-container-low px-2 py-0.5 font-mono text-[11px] font-semibold text-on-surface-variant">
-            <Key className="h-3 w-3 text-on-surface-muted" /> {joinCode}
-          </span>
+          {joinCode && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-outline-variant bg-surface-container-low px-2 py-0.5 font-mono text-[11px] font-semibold text-on-surface-variant">
+              <Key className="h-3 w-3 text-on-surface-muted" /> {joinCode}
+            </span>
+          )}
         </div>
         <span className="inline-flex items-center gap-1 text-xs text-on-surface-muted">
           <Users className="h-3.5 w-3.5" /> {contest._count?.participants || 0}

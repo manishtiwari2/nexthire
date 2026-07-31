@@ -8,12 +8,15 @@ import { awaitVerdict } from '../../api/judgeClient';
 import { useNotificationStore } from '../../store/useNotificationStore';
 import { Button } from '../../shared/components/ui';
 import { cn } from '../../shared/lib/cn';
+import { resolveStarter, StarterCode } from '../../shared/lib/starterTemplates';
 
 interface MonacoCodeEditorProps {
   questionId?: string;
   roomCode?: string;
   contestId?: string;
   onSubmitted?: () => void;
+  /** The question's starter templates, so Reset restores the right per-language skeleton. */
+  starterCodes?: StarterCode[];
   /** When set, Run/Submit are disabled (e.g. the contest has ended) and this reason is shown. */
   disabledReason?: string;
 }
@@ -38,7 +41,7 @@ const toolbarSelect =
   'outline-none transition-colors hover:border-outline focus:border-primary focus:ring-2 focus:ring-primary/25 ' +
   'cursor-pointer [&>option]:bg-surface-container';
 
-export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted, disabledReason }) => {
+export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted, starterCodes, disabledReason }) => {
   const {
     language, theme, fontSize, code, isExecuting, phase, result,
     setLanguage, setTheme, setCode, setIsExecuting, setPhase, setResult,
@@ -63,6 +66,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
       socket.off('code-update');
       socket.disconnect();
     };
+    // Intentionally keyed on roomCode only: the socket connects/disconnects with the room, and
+    // reconnecting on every code/language keystroke would drop the collaboration session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
   const handleCodeChange = (value: string | undefined) => {
@@ -150,9 +156,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => setCode('# Write your solution here\n')}
-            title="Reset code"
-            aria-label="Reset code"
+            onClick={() => setCode(resolveStarter(starterCodes, language))}
+            title="Reset to starter code"
+            aria-label="Reset to starter code"
           >
             <RotateCcw className="h-4 w-4" />
           </Button>

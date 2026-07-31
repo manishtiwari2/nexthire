@@ -1,5 +1,6 @@
 const { prisma } = require('../../shared/db');
 const { judgeQueueInstance } = require('../judge/judgeQueue');
+const { dispatchJudgeJob, isInlineMode } = require('../judge/judgeDispatch');
 const { buildSubmissionDto, buildExecutionDto } = require('./submissionDto');
 
 // GET /submissions/:id — a submission with its latest execution result.
@@ -83,7 +84,7 @@ async function rejudgeSubmission(req, res) {
 
     await prisma.submission.update({ where: { id: submission.id }, data: { status: 'PENDING' } });
 
-    const jobId = await judgeQueueInstance.enqueueJob({
+    const jobId = await dispatchJudgeJob({
       submissionId: submission.id,
       questionId: submission.questionId,
       code: submission.code,
@@ -111,7 +112,8 @@ async function cancelSubmission(req, res) {
       return res.status(409).json({ success: false, error: `Cannot cancel a submission in status ${submission.status}` });
     }
 
-    const cancelled = await judgeQueueInstance.cancelJob(submission.id);
+    // In inline mode there is no queue to remove from (jobs run synchronously), so skip it.
+    const cancelled = isInlineMode() ? false : await judgeQueueInstance.cancelJob(submission.id);
     await prisma.submission.update({ where: { id: submission.id }, data: { status: 'CANCELLED' } });
 
     res.json({ success: true, data: { submissionId: submission.id, status: 'CANCELLED', removedFromQueue: cancelled } });

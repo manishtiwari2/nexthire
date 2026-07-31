@@ -27,28 +27,19 @@ export const GoogleLoginForm: React.FC<GoogleLoginFormProps> = ({ onSuccess }) =
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [gisLoaded, setGisLoaded] = useState(false);
 
-  const { loginWithGoogle, login, isLoading } = useAuthStore();
+  const { loginWithGoogle, isLoading } = useAuthStore();
   const { addToast } = useNotificationStore();
 
-  // Load Google Identity Services SDK script dynamically if client ID is configured
+  // Preload the Google Identity Services SDK if a client ID is configured.
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) return;
-
-    if (window.google?.accounts?.id) {
-      setGisLoaded(true);
-      return;
-    }
+    if (!clientId || window.google?.accounts?.id) return;
 
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = () => {
-      setGisLoaded(true);
-    };
     document.body.appendChild(script);
   }, []);
 

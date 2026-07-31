@@ -15,7 +15,7 @@ export class LocalStorageProvider implements IStorageProvider {
     }
   }
 
-  async uploadFile(fileBuffer: Buffer, fileName: string, mimeType: string): Promise<UploadResult> {
+  async uploadFile(fileBuffer: Buffer, fileName: string, _mimeType: string): Promise<UploadResult> {
     const ext = path.extname(fileName) || '.bin';
     const key = `file-${Date.now()}-${Math.random().toString(36).substring(2)}${ext}`;
     const filePath = path.join(this.uploadDir, key);

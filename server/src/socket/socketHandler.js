@@ -12,7 +12,7 @@ function initSockets(io) {
       const decoded = jwt.verify(token, JWT_SECRET);
       socket.user = decoded;
       next();
-    } catch (err) {
+    } catch {
       next(new Error('Invalid token'));
     }
   });

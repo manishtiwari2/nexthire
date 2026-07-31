@@ -1,5 +1,5 @@
 const { prisma } = require('../../shared/db');
-const { judgeQueueInstance } = require('../judge/judgeQueue');
+const { dispatchJudgeJob } = require('../judge/judgeDispatch');
 const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
 
 // Helper to update contest status based on time
@@ -325,7 +325,7 @@ async function submitContestCode(req, res) {
       }
     });
 
-    const jobId = await judgeQueueInstance.enqueueJob({
+    const jobId = await dispatchJudgeJob({
       submissionId: submission.id,
       questionId,
       code,

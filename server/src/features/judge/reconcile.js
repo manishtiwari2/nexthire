@@ -5,7 +5,7 @@
 // boot we re-enqueue anything still PENDING so no submission is silently lost.
 
 const { prisma } = require('../../shared/db');
-const { judgeQueueInstance } = require('./judgeQueue');
+const { dispatchJudgeJob } = require('./judgeDispatch');
 
 async function reconcilePendingSubmissions() {
   const pending = await prisma.submission.findMany({
@@ -17,7 +17,7 @@ async function reconcilePendingSubmissions() {
   let requeued = 0;
   for (const s of pending) {
     try {
-      await judgeQueueInstance.enqueueJob({
+      await dispatchJudgeJob({
         submissionId: s.id,
         questionId: s.questionId,
         code: s.code,

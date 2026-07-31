@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
-import { Terminal, Lock, Mail, User as UserIcon, Shield, ArrowRight } from 'lucide-react';
+import { Terminal, Lock, Mail, User as UserIcon, ArrowRight } from 'lucide-react';
 import { Button, Card, Input, Alert } from '../shared/components/ui';
-import { cn } from '../shared/lib/cn';
 
 export const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'CANDIDATE' | 'ADMIN'>('CANDIDATE');
   const [error, setError] = useState('');
   const { register, isLoading } = useAuthStore();
   const navigate = useNavigate();
@@ -18,10 +16,11 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault();
     setError('');
     try {
-      await register(name, email, password, role);
+      // Role is assigned server-side (by email) — the client never chooses its own role.
+      await register(name, email, password, 'CANDIDATE');
       navigate('/contests');
     } catch (err: any) {
-      setError(err || 'Failed to register account');
+      setError(typeof err === 'string' ? err : 'Failed to register account');
     }
   };
 
@@ -79,36 +78,6 @@ export const RegisterPage: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
             />
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-on-surface-variant">Select Persona Role</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('CANDIDATE')}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all',
-                    role === 'CANDIDATE'
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline'
-                  )}
-                >
-                  <UserIcon className="h-4 w-4" /> Candidate
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('ADMIN')}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all',
-                    role === 'ADMIN'
-                      ? 'border-tertiary bg-tertiary-container text-tertiary'
-                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline'
-                  )}
-                >
-                  <Shield className="h-4 w-4" /> Platform Admin
-                </button>
-              </div>
-            </div>
 
             <Button
               type="submit"

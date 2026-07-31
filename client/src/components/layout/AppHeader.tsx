@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { Menu, LogOut, ShieldCheck, Sparkles, ChevronDown } from 'lucide-react';
 import { Badge } from '../../shared/components/ui';

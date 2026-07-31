@@ -7,6 +7,7 @@ import { SubmissionHistoryPanel } from '../features/question-bank/components/Sub
 import { RevisionScheduleCard } from '../features/revision/components/RevisionScheduleCard';
 import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore';
+import { resolveStarter } from '../shared/lib/starterTemplates';
 import { Badge, DifficultyBadge, Spinner, EmptyState, Alert, Tabs } from '../shared/components/ui';
 
 type PracticeTab = 'description' | 'hints' | 'editorial' | 'history' | 'revision';
@@ -45,19 +46,14 @@ export const LivePracticePage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [code, id, language]);
 
-  // Restore saved draft on mount
+  // Load the right code when the question loads or the language changes: a previously saved
+  // draft for THIS language wins; otherwise fall back to the question's starter template (or a
+  // sensible default skeleton) so the editor is never empty.
   useEffect(() => {
     if (!id || !question) return;
     const savedDraft = localStorage.getItem(`nexthire_draft_${id}_${language}`);
-    if (savedDraft) {
-      setCode(savedDraft);
-    } else if (question.starterCodes) {
-      const match = question.starterCodes.find((sc: any) => sc.language?.toLowerCase() === language.toLowerCase());
-      if (match && match.template) {
-        setCode(match.template);
-      }
-    }
-  }, [question, id, language]);
+    setCode(savedDraft || resolveStarter(question.starterCodes, language));
+  }, [question, id, language, setCode]);
 
   const tabItems = [
     { value: 'description' as const, label: 'Description', icon: <FileText /> },
@@ -187,6 +183,7 @@ export const LivePracticePage: React.FC = () => {
         <div className="min-h-[360px] flex-1 lg:h-full">
           <MonacoCodeEditor
             questionId={id}
+            starterCodes={question?.starterCodes}
             onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['submissions', id] })}
           />
         </div>

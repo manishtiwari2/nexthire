@@ -36,10 +36,11 @@ export const ContestsPage: React.FC = () => {
       const contestId = res.data?.contestId || res.data?.contest?.id;
       addToast('Assessment Joined', 'Successfully registered for assessment session', 'success');
       queryClient.invalidateQueries({ queryKey: ['contests'] });
-      navigate(`/contest/${contestId}`);
+      if (contestId) navigate(`/contest/${contestId}`);
     },
     onError: (err: any) => {
-      addToast('Join Failed', err?.message || 'Invalid or expired assessment join code', 'error');
+      // The API client rejects with the server's error string (not an Error object).
+      addToast('Join Failed', typeof err === 'string' ? err : 'Invalid or expired assessment join code', 'error');
     },
   });
 

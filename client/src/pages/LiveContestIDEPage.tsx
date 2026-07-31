@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { MonacoCodeEditor } from '../components/editor/MonacoCodeEditor';
 import { ContestLeaderboard } from '../features/contest/components/ContestLeaderboard';
 import { useAuthStore } from '../store/useAuthStore';
+import { useNotificationStore } from '../store/useNotificationStore';
 import { ArrowLeft, Trophy, Clock, FileText, Terminal, Award } from 'lucide-react';
 import { Badge, Spinner, EmptyState, Tabs } from '../shared/components/ui';
 import { cn } from '../shared/lib/cn';
@@ -22,6 +23,7 @@ function formatRemaining(ms: number): string {
 export const LiveContestIDEPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
+  const { addToast } = useNotificationStore();
   const [activeTab, setActiveTab] = useState<'problem' | 'leaderboard'>('problem');
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
   const [nowTs, setNowTs] = useState(() => Date.now());
@@ -45,6 +47,13 @@ export const LiveContestIDEPage: React.FC = () => {
   const joinMutation = useMutation({
     mutationFn: () => apiClient.post(`/contests/${id}/join`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] }),
+    onError: (err: any) => {
+      addToast(
+        'Could not join assessment',
+        typeof err === 'string' ? err : 'You may not be registered — submissions could be rejected.',
+        'warning'
+      );
+    },
   });
 
   const contest = contestData?.data;
@@ -70,6 +79,9 @@ export const LiveContestIDEPage: React.FC = () => {
     if (contest.status === 'ENDED') return;
     joinedRef.current = true;
     joinMutation.mutate();
+    // Auto-join runs exactly once per contest load (guarded by joinedRef); depending on the
+    // mutation object would re-trigger it on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, contest]);
 
   // Timing: the endTime is authoritative. When it passes, the contest is over.

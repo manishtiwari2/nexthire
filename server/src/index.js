@@ -13,6 +13,7 @@ const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
 const { initJudgeEventRelay } = require('./features/judge/judgeEvents');
 const { reconcilePendingSubmissions } = require('./features/judge/reconcile');
+const { isInlineMode, setJudgeIo } = require('./features/judge/judgeDispatch');
 const { updateContestStatuses } = require('./features/contest/contestController');
 const { prisma } = require('./shared/db');
 
@@ -34,12 +35,19 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // WebSockets
 initSockets(io);
 
-// Relay judge verdicts published by the (separate) worker process to the submitter's room.
-// Non-fatal if Redis is unavailable — the frontend falls back to polling.
-try {
-  initJudgeEventRelay(io);
-} catch (err) {
-  console.error('[judge] event relay init failed:', err.message);
+if (isInlineMode()) {
+  // Inline judge (JUDGE_INLINE=1): submissions are evaluated in this process, so there is no
+  // separate worker and no Redis relay. Emit lifecycle events straight to Socket.IO instead.
+  setJudgeIo(io);
+  console.log('🧑‍⚖️  [judge] inline mode — submissions evaluated in-process (no Redis/worker).');
+} else {
+  // Relay judge verdicts published by the (separate) worker process to the submitter's room.
+  // Non-fatal if Redis is unavailable — the frontend falls back to polling.
+  try {
+    initJudgeEventRelay(io);
+  } catch (err) {
+    console.error('[judge] event relay init failed:', err.message);
+  }
 }
 
 // Safety net: re-enqueue any submissions left PENDING (e.g. enqueued just before a crash).
@@ -75,7 +83,8 @@ app.use('/api/contests', contestRoutes);
 app.use('/api/submissions', submissionRoutes);
 
 // Global Error Handler
-app.use((err, req, res, next) => {
+// eslint-disable-next-line no-unused-vars -- Express identifies error middleware by its 4-arg signature.
+app.use((err, req, res, _next) => {
   console.error('[Express Error]', err);
   res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
 });

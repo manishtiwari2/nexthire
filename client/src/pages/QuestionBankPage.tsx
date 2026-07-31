@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { AppLayout } from '../components/layout/AppLayout';
 import { useAuthStore } from '../store/useAuthStore';
+import { useNotificationStore } from '../store/useNotificationStore';
 import { QuestionFilterBar } from '../features/question-bank/components/QuestionFilterBar';
 import { QuestionTable } from '../features/question-bank/components/QuestionTable';
 import { Database, Plus } from 'lucide-react';
@@ -16,6 +17,7 @@ export const QuestionBankPage: React.FC = () => {
   const [page, setPage] = useState(1);
 
   const { user } = useAuthStore();
+  const { addToast } = useNotificationStore();
   const isAdmin = user?.role === 'ADMIN';
   const queryClient = useQueryClient();
 
@@ -33,6 +35,10 @@ export const QuestionBankPage: React.FC = () => {
     mutationFn: (id: string) => apiClient.delete(`/questions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['questions'] });
+      addToast('Question Deleted', 'The question was removed from the bank.', 'success');
+    },
+    onError: (err: any) => {
+      addToast('Delete Failed', typeof err === 'string' ? err : 'Could not delete the question.', 'error');
     }
   });
 
