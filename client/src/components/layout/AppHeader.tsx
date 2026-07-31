@@ -42,7 +42,7 @@ export const AppHeader: React.FC = () => {
         <div className="flex items-center gap-3">
           <Link to="/profile" className="flex items-center gap-3 group">
             <div className="text-right">
-              <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{user?.name || 'Alex Rivera'}</p>
+              <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{user?.name || user?.email || 'User'}</p>
               <div className="flex items-center justify-end gap-1">
                 {user?.role === 'ADMIN' ? (
                   <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
@@ -50,15 +50,15 @@ export const AppHeader: React.FC = () => {
                   </span>
                 ) : (
                   <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                    <Sparkles className="w-3 h-3" /> RANK #42
+                    <Sparkles className="w-3 h-3" /> CANDIDATE
                   </span>
                 )}
               </div>
             </div>
             <img
               className="w-9 h-9 rounded-full border-2 border-primary-container object-cover"
-              src={user?.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex'}
-              alt={user?.name}
+              src={user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.email || 'user')}`}
+              alt={user?.name || 'User'}
             />
           </Link>
 

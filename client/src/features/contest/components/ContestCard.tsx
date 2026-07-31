@@ -1,25 +1,32 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Clock, Users, ArrowRight } from 'lucide-react';
+import { Trophy, Clock, Users, ArrowRight, Key } from 'lucide-react';
 
 interface ContestCardProps {
   contest: any;
   onJoin?: (id: string) => void;
 }
 
-export const ContestCard: React.FC<ContestCardProps> = ({ contest, onJoin }) => {
+export const ContestCard: React.FC<ContestCardProps> = ({ contest }) => {
   const isLive = contest.status === 'LIVE';
   const isEnded = contest.status === 'ENDED';
+  const joinCode = contest.invites?.[0]?.code || contest.joinCode || 'DSA-SESSION';
 
   return (
     <div className="bg-white p-6 rounded-3xl border border-outline-variant shadow-sm space-y-4 hover:border-primary/40 transition-all">
       <div className="flex items-center justify-between">
-        <span className={`px-3 py-1 text-xs font-bold rounded-full ${
-          isLive ? 'bg-red-100 text-red-700 animate-pulse' :
-          isEnded ? 'bg-slate-100 text-slate-600' : 'bg-blue-100 text-blue-700'
-        }`}>
-          {contest.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+            isLive ? 'bg-red-100 text-red-700 animate-pulse' :
+            isEnded ? 'bg-slate-100 text-slate-600' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {contest.status}
+          </span>
+
+          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-800 text-[11px] font-mono font-bold rounded-lg border border-slate-200 flex items-center gap-1">
+            <Key className="w-3 h-3 text-slate-500" /> Code: {joinCode}
+          </span>
+        </div>
 
         <span className="text-xs font-mono text-slate-500 flex items-center gap-1">
           <Users className="w-3.5 h-3.5 text-primary" /> {contest._count?.participants || 0} Registered

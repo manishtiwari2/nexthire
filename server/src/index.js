@@ -8,14 +8,9 @@ require('dotenv').config();
 const authRoutes = require('./features/auth/authRoutes');
 const questionRoutes = require('./features/question-bank/questionRoutes');
 const contestRoutes = require('./features/contest/contestRoutes');
-const interviewRoutes = require('./features/interview/interviewRoutes');
-const dashboardRoutes = require('./features/dashboard/dashboardRoutes');
-const revisionRoutes = require('./features/revision/revisionRoutes');
-const profileRoutes = require('./features/profile/profileRoutes');
 const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
 const { prisma } = require('./shared/db');
-const notificationRoutes = require('./features/notification/notificationRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -47,20 +42,11 @@ if (process.env.NODE_ENV !== 'production') {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/questions', questionRoutes);
 app.use('/api/v1/contests', contestRoutes);
-app.use('/api/v1/interviews', interviewRoutes);
-app.use('/api/v1/dashboard', dashboardRoutes);
-app.use('/api/v1/revision', revisionRoutes);
-app.use('/api/v1/profile', profileRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
-app.use('/api/v1/users/profile', profileRoutes);  // Client calls /users/profile
 
-// Fallback v1 endpoint aliases for client backward compatibility
+// Backward-compatible aliases
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/contests', contestRoutes);
-app.use('/api/interviews', interviewRoutes);
-app.use('/api/users/profile', profileRoutes);
-app.use('/api/notifications', notificationRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

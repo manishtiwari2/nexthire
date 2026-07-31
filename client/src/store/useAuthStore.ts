@@ -15,9 +15,10 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithGoogle: (email: string, name?: string, avatarUrl?: string) => Promise<void>;
+  loginWithGoogle: (payload: { credential?: string; email?: string; name?: string; avatarUrl?: string }) => Promise<void>;
   login: (email: string, password?: string) => Promise<void>;
   register: (name: string, email: string, password?: string, role?: string) => Promise<void>;
+  updateUser: (partialUser: Partial<User>) => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -33,16 +34,16 @@ function safeParseUser(): User | null {
   }
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: safeParseUser(),
   token: localStorage.getItem('nexthire_access_token') || null,
   isAuthenticated: !!localStorage.getItem('nexthire_access_token'),
   isLoading: false,
 
-  loginWithGoogle: async (email, name, avatarUrl) => {
+  loginWithGoogle: async (payload) => {
     set({ isLoading: true });
     try {
-      const res: any = await apiClient.post('/auth/google', { email, name, avatarUrl });
+      const res: any = await apiClient.post('/auth/google', payload);
       const { accessToken, user } = res.data;
 
       localStorage.setItem('nexthire_access_token', accessToken);
@@ -85,6 +86,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
       throw err;
     }
+  },
+
+  updateUser: (partialUser) => {
+    const current = get().user;
+    if (!current) return;
+    const updated = { ...current, ...partialUser };
+    localStorage.setItem('nexthire_user', JSON.stringify(updated));
+    set({ user: updated });
   },
 
   logout: () => {

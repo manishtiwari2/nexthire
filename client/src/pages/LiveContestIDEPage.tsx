@@ -127,9 +127,12 @@ export const LiveContestIDEPage: React.FC = () => {
         </div>
 
         {/* Right Side: Monaco Editor */}
-        <div className="w-[55%] h-full">
-          <MonacoCodeEditor questionId={activeContestQuestion?.id} roomCode={`CONTEST-${id}`} />
-        </div>
+          <MonacoCodeEditor 
+            questionId={activeContestQuestion?.id} 
+            roomCode={`CONTEST-${id}`} 
+            contestId={id}
+            onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] })}
+          />
       </div>
     </div>
   );

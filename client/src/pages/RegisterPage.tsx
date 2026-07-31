@@ -17,7 +17,7 @@ export const RegisterPage: React.FC = () => {
     setError('');
     try {
       await register(name, email, password, role);
-      navigate('/dashboard');
+      navigate('/contests');
     } catch (err: any) {
       setError(err || 'Failed to register account');
     }
