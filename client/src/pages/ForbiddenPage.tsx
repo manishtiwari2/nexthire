@@ -1,26 +1,28 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Button } from '../shared/components/ui';
 
 export const ForbiddenPage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center">
-      <div className="text-center space-y-6 max-w-md px-6">
-        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-          <ShieldAlert className="w-10 h-10 text-red-600" />
+    <div className="relative min-h-screen bg-background text-on-surface flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+
+      <div className="relative max-w-md space-y-6 text-center">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-danger/25 bg-danger-container text-on-danger-container">
+          <ShieldAlert className="h-10 w-10" />
         </div>
-        <div>
-          <h1 className="text-4xl font-black text-on-surface">403</h1>
-          <h2 className="text-xl font-bold text-on-surface mt-2">Access Forbidden</h2>
-          <p className="text-sm text-on-surface-variant mt-2">
+        <div className="space-y-2">
+          <p className="text-5xl font-black tracking-tight text-on-surface">403</p>
+          <h1 className="text-xl font-bold text-on-surface">Access Forbidden</h1>
+          <p className="text-sm text-on-surface-variant">
             You don't have permission to access this page. Contact an administrator if you believe this is an error.
           </p>
         </div>
-        <Link
-          to="/contests"
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-md hover:bg-blue-700 transition-all"
-        >
-          Return to Assessments
+        <Link to="/contests" className="inline-block">
+          <Button size="lg" leftIcon={<ArrowLeft className="h-4 w-4" />}>
+            Return to Assessments
+          </Button>
         </Link>
       </div>
     </div>

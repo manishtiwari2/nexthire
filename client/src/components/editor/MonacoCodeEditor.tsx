@@ -6,6 +6,8 @@ import { apiClient } from '../../api/client';
 import { io, Socket } from 'socket.io-client';
 import { awaitVerdict } from '../../api/judgeClient';
 import { useNotificationStore } from '../../store/useNotificationStore';
+import { Button } from '../../shared/components/ui';
+import { cn } from '../../shared/lib/cn';
 
 interface MonacoCodeEditorProps {
   questionId?: string;
@@ -20,7 +22,7 @@ interface MonacoCodeEditorProps {
 const MONACO_LANGUAGE_MAP: Record<SupportedLanguage, string> = {
   python: 'python',
   cpp: 'cpp',
-  java: 'java'
+  java: 'java',
 };
 
 const PHASE_LABEL: Record<JudgePhase, string> = {
@@ -28,13 +30,18 @@ const PHASE_LABEL: Record<JudgePhase, string> = {
   QUEUED: 'Queued…',
   COMPILING: 'Compiling…',
   RUNNING: 'Running test cases…',
-  DONE: ''
+  DONE: '',
 };
+
+const toolbarSelect =
+  'h-8 rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs font-medium text-on-surface ' +
+  'outline-none transition-colors hover:border-outline focus:border-primary focus:ring-2 focus:ring-primary/25 ' +
+  'cursor-pointer [&>option]:bg-surface-container';
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted, disabledReason }) => {
   const {
     language, theme, fontSize, code, isExecuting, phase, result,
-    setLanguage, setTheme, setCode, setIsExecuting, setPhase, setResult
+    setLanguage, setTheme, setCode, setIsExecuting, setPhase, setResult,
   } = useEditorStore();
   const socketRef = useRef<Socket | null>(null);
   const { addToast } = useNotificationStore();
@@ -89,7 +96,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
       setResult({
         status: 'INTERNAL_ERROR',
         output: String(err?.message || err),
-        error: String(err)
+        error: String(err),
       });
     } finally {
       setPhase('DONE');
@@ -107,24 +114,25 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
   const accepted = result?.status === 'ACCEPTED';
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
-      {/* Editor Top Bar */}
-      <div className="h-12 bg-[#252525] border-b border-[#333] flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-2">
+      {/* Editor top bar */}
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-outline-variant bg-surface-container-low px-3">
+        <div className="flex items-center gap-2">
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
-            className="bg-[#1e1e1e] text-white text-xs font-mono border border-slate-700 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+            aria-label="Language"
+            className={cn(toolbarSelect, 'font-mono')}
           >
             <option value="python">Python 3.10</option>
             <option value="cpp">C++ 20 (GCC)</option>
             <option value="java">Java 17 (OpenJDK)</option>
           </select>
-
           <select
             value={theme}
             onChange={(e) => setTheme(e.target.value as any)}
-            className="bg-[#1e1e1e] text-white text-xs font-mono border border-slate-700 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+            aria-label="Editor theme"
+            className={cn(toolbarSelect, 'hidden sm:block')}
           >
             <option value="vs-dark">VS Dark</option>
             <option value="light">VS Light</option>
@@ -133,50 +141,54 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
 
         <div className="flex items-center gap-2">
           {busy && phase !== 'DONE' && (
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 mr-1">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {PHASE_LABEL[phase] || 'Working…'}
+            <span className="mr-1 hidden items-center gap-1.5 text-[11px] font-semibold text-warning sm:flex">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {PHASE_LABEL[phase] || 'Working…'}
             </span>
           )}
 
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
             onClick={() => setCode('# Write your solution here\n')}
-            className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"
-            title="Reset Code"
+            title="Reset code"
+            aria-label="Reset code"
           >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
 
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleRunCode}
             disabled={busy || locked}
             title={locked ? disabledReason : undefined}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700"
+            leftIcon={<Play className="h-3.5 w-3.5 fill-current text-primary" />}
           >
-            <Play className="w-3.5 h-3.5 fill-current text-blue-400" />
-            <span>{busy ? 'Judging…' : 'Run Code'}</span>
-          </button>
+            {busy ? 'Judging…' : 'Run'}
+          </Button>
 
-          <button
+          <Button
+            size="sm"
             onClick={handleSubmitCode}
             disabled={busy || locked}
             title={locked ? disabledReason : undefined}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            leftIcon={<Send className="h-3.5 w-3.5" />}
           >
-            <Send className="w-3.5 h-3.5" />
-            <span>{busy ? 'Judging…' : 'Submit Code'}</span>
-          </button>
+            {busy ? 'Judging…' : 'Submit'}
+          </Button>
         </div>
       </div>
 
       {/* Locked banner (e.g. contest ended) */}
       {locked && (
-        <div className="border-b border-red-900/50 bg-red-950/40 px-4 py-2 text-[11px] font-bold text-red-300 flex items-center gap-2">
-          <AlertCircle className="w-3.5 h-3.5" /> {disabledReason}
+        <div className="flex items-center gap-2 border-b border-danger/30 bg-error-container/50 px-4 py-2 text-[11px] font-semibold text-danger">
+          <AlertCircle className="h-3.5 w-3.5" /> {disabledReason}
         </div>
       )}
 
-      {/* Monaco Surface */}
-      <div className="flex-1 min-h-[350px]">
+      {/* Monaco surface */}
+      <div className="min-h-[320px] flex-1">
         <Editor
           height="100%"
           language={MONACO_LANGUAGE_MAP[language] || 'javascript'}
@@ -188,49 +200,54 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
             automaticLayout: true,
-            padding: { top: 12, bottom: 12 },
-            fontFamily: 'JetBrains Mono, monospace'
+            padding: { top: 14, bottom: 14 },
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontLigatures: true,
           }}
         />
       </div>
 
       {/* Live judging banner */}
       {busy && !result && (
-        <div className="border-t border-[#333] bg-[#181825] px-4 py-3 text-xs font-mono text-amber-300 flex items-center gap-2">
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <div className="flex items-center gap-2 border-t border-outline-variant bg-surface-container px-4 py-3 font-mono text-xs text-warning">
+          <Loader2 className="h-4 w-4 animate-spin" />
           {PHASE_LABEL[phase] || 'Submitting to the judge…'}
         </div>
       )}
 
-      {/* Output Console Panel */}
+      {/* Output console */}
       {result && (
-        <div className="border-t border-[#333] bg-[#181825] p-4 text-xs font-mono space-y-2 max-h-56 overflow-y-auto">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              {accepted ? (
-                <span className="flex items-center gap-1 text-emerald-400 font-bold">
-                  <CheckCircle className="w-4 h-4" /> ACCEPTED
-                  {typeof result.passCount === 'number' && (
-                    <> ({result.passCount}/{result.totalTestCases} Test Cases Passed)</>
-                  )}
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-red-400 font-bold">
-                  <AlertCircle className="w-4 h-4" /> {result.status}
-                  {typeof result.passCount === 'number' && typeof result.totalTestCases === 'number' && result.totalTestCases > 0 && (
-                    <> ({result.passCount}/{result.totalTestCases} Passed)</>
-                  )}
-                </span>
-              )}
-            </div>
+        <div className="max-h-60 shrink-0 space-y-2 overflow-y-auto border-t border-outline-variant bg-surface-container p-4 font-mono text-xs">
+          <div className="flex items-center justify-between gap-2 border-b border-outline-variant pb-2">
+            {accepted ? (
+              <span className="flex items-center gap-1.5 font-bold text-success">
+                <CheckCircle className="h-4 w-4" /> ACCEPTED
+                {typeof result.passCount === 'number' && (
+                  <span className="font-normal text-on-surface-variant">
+                    ({result.passCount}/{result.totalTestCases} passed)
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-bold text-danger">
+                <AlertCircle className="h-4 w-4" /> {result.status}
+                {typeof result.passCount === 'number' && typeof result.totalTestCases === 'number' && result.totalTestCases > 0 && (
+                  <span className="font-normal text-on-surface-variant">
+                    ({result.passCount}/{result.totalTestCases} passed)
+                  </span>
+                )}
+              </span>
+            )}
 
-            <div className="flex items-center gap-4 text-slate-400 text-[11px]">
+            <div className="flex items-center gap-4 text-[11px] text-on-surface-muted">
               <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-blue-400" />
+                <Clock className="h-3 w-3 text-primary" />
                 {result.executionTime != null ? `${result.executionTime}ms` : '—'}
               </span>
               <span className="flex items-center gap-1">
-                <Cpu className="w-3 h-3 text-purple-400" />
+                <Cpu className="h-3 w-3 text-tertiary" />
                 {result.memoryUsed != null ? `${result.memoryUsed} MB` : '—'}
               </span>
             </div>
@@ -239,38 +256,40 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
           {/* Compiler errors */}
           {result.status === 'COMPILATION_ERROR' && result.compilerOutput && (
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-amber-400 mb-1">Compiler Output</p>
-              <pre className="text-amber-200 whitespace-pre-wrap leading-relaxed">{result.compilerOutput}</pre>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-warning">Compiler Output</p>
+              <pre className="whitespace-pre-wrap leading-relaxed text-on-warning-container">{result.compilerOutput}</pre>
             </div>
           )}
 
           {/* Runtime stderr */}
           {result.status !== 'COMPILATION_ERROR' && result.stderr && (
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-red-400 mb-1">Stderr</p>
-              <pre className="text-red-300 whitespace-pre-wrap leading-relaxed">{result.stderr}</pre>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-danger">Stderr</p>
+              <pre className="whitespace-pre-wrap leading-relaxed text-on-error-container">{result.stderr}</pre>
             </div>
           )}
 
           {/* Program stdout */}
           {result.output && result.status !== 'COMPILATION_ERROR' && (
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Output</p>
-              <pre className="text-slate-300 whitespace-pre-wrap leading-relaxed">{result.output}</pre>
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-on-surface-muted">Output</p>
+              <pre className="whitespace-pre-wrap leading-relaxed text-on-surface-variant">{result.output}</pre>
             </div>
           )}
 
           {/* Sample test breakdown (hidden cases are never returned by the API) */}
           {Array.isArray(result.testResults) && result.testResults.length > 0 && (
-            <div className="space-y-1 pt-1 border-t border-slate-800">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Sample Test Cases</p>
+            <div className="space-y-1 border-t border-outline-variant pt-2">
+              <p className="text-[10px] uppercase tracking-wide text-on-surface-muted">Sample Test Cases</p>
               {result.testResults.map((t) => (
                 <div key={t.index} className="flex items-center gap-2 text-[11px]">
-                  {t.verdict === 'ACCEPTED'
-                    ? <CheckCircle className="w-3 h-3 text-emerald-400" />
-                    : <AlertCircle className="w-3 h-3 text-red-400" />}
-                  <span className="text-slate-400">Case #{t.index + 1}</span>
-                  <span className={t.verdict === 'ACCEPTED' ? 'text-emerald-400' : 'text-red-400'}>{t.verdict}</span>
+                  {t.verdict === 'ACCEPTED' ? (
+                    <CheckCircle className="h-3 w-3 text-success" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3 text-danger" />
+                  )}
+                  <span className="text-on-surface-muted">Case #{t.index + 1}</span>
+                  <span className={t.verdict === 'ACCEPTED' ? 'text-success' : 'text-danger'}>{t.verdict}</span>
                 </div>
               ))}
             </div>

@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
-import { Calendar, RotateCcw, CheckCircle2, Sparkles } from 'lucide-react';
+import { RotateCcw, Sparkles } from 'lucide-react';
+import { Badge, Alert } from '../../../shared/components/ui';
+import { cn } from '../../../shared/lib/cn';
 
 interface RevisionScheduleCardProps {
   questionId: string;
 }
+
+const RATINGS = [
+  { quality: 2, label: 'Hard', interval: '1d', cls: 'border-danger/30 bg-error-container/50 text-danger hover:bg-error-container' },
+  { quality: 3, label: 'Good', interval: '3d', cls: 'border-warning/30 bg-warning-container/50 text-warning hover:bg-warning-container' },
+  { quality: 4, label: 'Easy', interval: '6d', cls: 'border-info/30 bg-info-container/50 text-info hover:bg-info-container' },
+  { quality: 5, label: 'Perfect', interval: '14d', cls: 'border-success/30 bg-success-container/50 text-success hover:bg-success-container' },
+];
 
 export const RevisionScheduleCard: React.FC<RevisionScheduleCardProps> = ({ questionId }) => {
   const [successMsg, setSuccessMsg] = useState('');
@@ -18,59 +27,42 @@ export const RevisionScheduleCard: React.FC<RevisionScheduleCardProps> = ({ ques
       const nextDate = new Date(res.data.nextReviewAt).toLocaleDateString();
       setSuccessMsg(`Revision scheduled! Next review due on ${nextDate}`);
       setTimeout(() => setSuccessMsg(''), 4000);
-    }
+    },
   });
 
   return (
-    <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl space-y-3 text-xs text-purple-900">
+    <div className="space-y-4 rounded-xl border border-tertiary/25 bg-tertiary-container/40 p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 font-bold text-sm">
-          <RotateCcw className="w-4 h-4 text-purple-700" /> Spaced Repetition (SM-2 Revision)
-        </div>
-        <span className="text-[10px] font-bold bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> Auto Scheduled
-        </span>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+          <RotateCcw className="h-4 w-4 text-tertiary" /> Spaced Repetition (SM-2)
+        </h3>
+        <Badge variant="accent">
+          <Sparkles className="h-3 w-3" /> Auto Scheduled
+        </Badge>
       </div>
 
-      <p className="text-[11px] text-purple-800 leading-relaxed">
-        Rate your solving confidence to automatically schedule your next review interval according to the SM-2 spaced repetition algorithm.
+      <p className="text-xs leading-relaxed text-on-surface-variant">
+        Rate your solving confidence to automatically schedule your next review interval using the SM-2 spaced
+        repetition algorithm.
       </p>
 
-      {successMsg && (
-        <div className="p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-xl flex items-center gap-1.5">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700" /> {successMsg}
-        </div>
-      )}
+      {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
-      <div className="grid grid-cols-4 gap-2 pt-1">
-        <button
-          onClick={() => reviewMutation.mutate(2)}
-          disabled={reviewMutation.isPending}
-          className="p-2 bg-red-100 hover:bg-red-200 text-red-800 font-bold rounded-xl text-center text-[10px] transition-all"
-        >
-          Hard (1d)
-        </button>
-        <button
-          onClick={() => reviewMutation.mutate(3)}
-          disabled={reviewMutation.isPending}
-          className="p-2 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold rounded-xl text-center text-[10px] transition-all"
-        >
-          Good (3d)
-        </button>
-        <button
-          onClick={() => reviewMutation.mutate(4)}
-          disabled={reviewMutation.isPending}
-          className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold rounded-xl text-center text-[10px] transition-all"
-        >
-          Easy (6d)
-        </button>
-        <button
-          onClick={() => reviewMutation.mutate(5)}
-          disabled={reviewMutation.isPending}
-          className="p-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold rounded-xl text-center text-[10px] transition-all"
-        >
-          Perfect (14d)
-        </button>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {RATINGS.map((r) => (
+          <button
+            key={r.quality}
+            onClick={() => reviewMutation.mutate(r.quality)}
+            disabled={reviewMutation.isPending}
+            className={cn(
+              'flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50',
+              r.cls
+            )}
+          >
+            <span>{r.label}</span>
+            <span className="font-mono text-[10px] opacity-70">{r.interval}</span>
+          </button>
+        ))}
       </div>
     </div>
   );

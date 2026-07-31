@@ -1,45 +1,193 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   NextHire Design System — dark-first, single premium theme.
+   All design tokens live here (Tailwind v4 @theme). Utilities such as
+   bg-surface, text-on-surface, border-outline-variant, text-primary, and
+   opacity modifiers (e.g. bg-primary/10) are generated from these tokens.
+   ========================================================================== */
+@theme {
+  /* ---- Typography -------------------------------------------------------- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---- Radius ------------------------------------------------------------ */
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+
+  /* ---- Surfaces (layered dark neutrals) ---------------------------------- */
+  --color-background: #08090c;
+  --color-surface: #0b0d11;
+  --color-surface-bright: #14171d;
+  --color-surface-dim: #08090c;
+  --color-surface-container-lowest: #0d0f13;
+  --color-surface-container-low: #121519;
+  --color-surface-container: #161a1f;
+  --color-surface-container-high: #1c2027;
+  --color-surface-container-highest: #23282f;
+  --color-surface-variant: #1c2027;
+
+  /* ---- Foreground / text ------------------------------------------------- */
+  --color-on-background: #e7e9ee;
+  --color-on-surface: #e7e9ee;
+  --color-on-surface-variant: #99a1ad;
+  --color-on-surface-muted: #6b7280;
+
+  /* ---- Borders / outlines ------------------------------------------------ */
+  --color-outline: #333a44;
+  --color-outline-variant: #232830;
+
+  /* ---- Primary (indigo accent) ------------------------------------------- */
+  --color-primary: #6366f1;
+  --color-primary-hover: #7c7ff5;
+  --color-primary-container: #4f46e5;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #e0e2ff;
+  --color-primary-fixed: #1a1c33;
+
+  /* ---- Secondary (used for active/subtle states) ------------------------- */
+  --color-secondary: #818cf8;
+  --color-secondary-container: #1e2233;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #c7d0ff;
+
+  /* ---- Tertiary / accent (violet) ---------------------------------------- */
+  --color-tertiary: #a78bfa;
+  --color-tertiary-container: #241b3d;
+  --color-on-tertiary-container: #ddd6fe;
+
+  /* ---- Semantic ---------------------------------------------------------- */
+  --color-success: #22c55e;
+  --color-success-container: #0f2a1a;
+  --color-on-success-container: #86efac;
+
+  --color-warning: #f59e0b;
+  --color-warning-container: #2a1f08;
+  --color-on-warning-container: #fcd34d;
+
+  --color-error: #f0616d;
+  --color-error-container: #2c1416;
+  --color-on-error-container: #fca5ac;
+  --color-danger: #f0616d;
+  --color-danger-container: #2c1416;
+  --color-on-danger-container: #fca5ac;
+
+  --color-info: #38bdf8;
+  --color-info-container: #0a2532;
+  --color-on-info-container: #a5e3fb;
+
+  /* ---- Misc -------------------------------------------------------------- */
+  --color-inverse-surface: #e7e9ee;
+  --color-inverse-on-surface: #0b0d11;
+
+  /* ---- Elevation shadows (dark-tuned) ------------------------------------ */
+  --shadow-elev-1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-elev-2: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+  --shadow-elev-3: 0 12px 32px -8px rgb(0 0 0 / 0.6);
+
+  /* ---- Animations -------------------------------------------------------- */
+  --animate-fade-in: fade-in 0.25s ease forwards;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-in: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-scale-in: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ---- Keyframes ----------------------------------------------------------- */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.45; }
+}
+
+/* ---- Base layer ---------------------------------------------------------- */
 @layer base {
+  * {
+    border-color: var(--color-outline-variant);
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    font-family: 'Inter', sans-serif;
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Consistent, accessible focus ring for keyboard users */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-primary) 40%, transparent);
+    color: #ffffff;
   }
 }
 
-/* Glassmorphism Card Style */
-.glass-card {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-}
+/* ---- Utilities ----------------------------------------------------------- */
+@layer utilities {
+  .animate-fade-in { animation: var(--animate-fade-in); }
+  .animate-slide-up { animation: var(--animate-slide-up); }
+  .animate-slide-in { animation: var(--animate-slide-in); }
+  .animate-scale-in { animation: var(--animate-scale-in); }
 
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
+  /* Frosted panel used for sticky headers */
+  .glass {
+    background-color: color-mix(in srgb, var(--color-surface) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(140%);
   }
-  to {
-    transform: translateX(0);
-    opacity: 1;
+
+  /* Subtle radial glow for hero/marketing sections */
+  .bg-grid {
+    background-image: radial-gradient(circle at 1px 1px, var(--color-outline-variant) 1px, transparent 0);
+    background-size: 32px 32px;
   }
 }
 
-.animate-slide-in {
-  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* ---- Custom scrollbars --------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-outline) transparent;
 }
-
-/* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(115, 118, 134, 0.3);
+  background: var(--color-outline);
   border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(115, 118, 134, 0.5);
+  background: var(--color-on-surface-muted);
+  background-clip: content-box;
 }

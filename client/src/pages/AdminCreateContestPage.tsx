@@ -2,13 +2,21 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { AppHeader } from '../components/layout/AppHeader';
-import { AppSidebar } from '../components/layout/AppSidebar';
+import { AppLayout } from '../components/layout/AppLayout';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
-import { Button } from '../shared/components/ui/Button';
-import { Input } from '../shared/components/ui/Input';
-import { Trophy, Clock, CheckCircle2, Key, ArrowRight } from 'lucide-react';
+import {
+  Button,
+  Input,
+  Textarea,
+  Card,
+  SectionHeader,
+  DifficultyBadge,
+  Spinner,
+  EmptyState,
+} from '../shared/components/ui';
+import { cn } from '../shared/lib/cn';
+import { Trophy, Clock, ListChecks, FileText, CheckCircle2, Key, ArrowRight, Database } from 'lucide-react';
 
 // Admin flow: create a contest (steps 3–5 of the interview journey) — pick questions,
 // set a duration, and get a join code participants can enter with.
@@ -94,141 +102,177 @@ export const AdminCreateContestPage: React.FC = () => {
   // Success screen: show the join code + let the host enter the live IDE.
   if (joinCode || createdContestId) {
     return (
-      <div className="min-h-screen bg-surface">
-        <AppSidebar />
-        <AppHeader />
-        <main className="ml-[260px] pt-16 p-8 max-w-2xl mx-auto">
-          <div className="bg-white border border-outline-variant rounded-3xl p-8 shadow-sm text-center space-y-5">
-            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-7 h-7" />
+      <AppLayout>
+        <div className="mx-auto max-w-2xl">
+          <Card className="space-y-5 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-success-container text-success">
+              <CheckCircle2 className="h-7 w-7" />
             </div>
-            <div>
+            <div className="space-y-1">
               <h1 className="text-2xl font-bold text-on-surface">Assessment Created</h1>
-              <p className="text-sm text-on-surface-variant mt-1">Share this join code with participants so they can enter the live IDE.</p>
+              <p className="text-sm text-on-surface-variant">
+                Share this join code with participants so they can enter the live IDE.
+              </p>
             </div>
 
             {joinCode && (
-              <div className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-mono text-xl font-bold rounded-2xl tracking-widest">
-                <Key className="w-5 h-5 text-amber-400" /> {joinCode}
+              <div className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-high px-6 py-3 font-mono text-xl font-bold tracking-widest text-on-surface">
+                <Key className="h-5 w-5 text-warning" /> {joinCode}
               </div>
             )}
 
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Button variant="outline" onClick={() => navigate('/contests')}>Back to Assessments</Button>
+              <Button variant="outline" onClick={() => navigate('/contests')}>
+                Back to Assessments
+              </Button>
               {createdContestId && (
-                <Button onClick={() => navigate(`/contest/${createdContestId}`)}>
-                  <span>Enter Contest IDE</span>
-                  <ArrowRight className="w-4 h-4" />
+                <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => navigate(`/contest/${createdContestId}`)}>
+                  Enter Contest IDE
                 </Button>
               )}
             </div>
-          </div>
-        </main>
-      </div>
+          </Card>
+        </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      <AppSidebar />
-      <AppHeader />
-
-      <main className="ml-[260px] pt-16 p-8 space-y-6 max-w-3xl mx-auto">
-        <div>
-          <h1 className="text-2xl font-bold text-on-surface flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-primary" /> Create New Assessment
-          </h1>
-          <p className="text-sm text-on-surface-variant">Configure a timed coding contest, pick its questions, and generate a join code.</p>
-        </div>
+    <AppLayout>
+      <div className="mx-auto max-w-3xl space-y-6">
+        <SectionHeader
+          icon={<Trophy />}
+          title="Create New Assessment"
+          description="Configure a timed coding contest, pick its questions, and generate a join code."
+        />
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic details */}
-          <div className="bg-white border border-outline-variant rounded-3xl p-6 shadow-sm space-y-4">
-            <Input label="Assessment Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Backend Engineer Screen — Round 1" required />
-            <div className="space-y-1 w-full">
-              <label className="text-xs font-bold text-on-surface">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this assessment covers and any instructions for candidates."
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2.5 text-xs text-on-surface focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none min-h-[80px]"
-                required
-              />
-            </div>
-          </div>
+          <Card className="space-y-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+              <FileText className="h-4 w-4 text-primary" /> Assessment Details
+            </h3>
+            <Input
+              label="Assessment Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Backend Engineer Screen — Round 1"
+              required
+            />
+            <Textarea
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What this assessment covers and any instructions for candidates."
+              required
+            />
+          </Card>
 
           {/* Timing */}
-          <div className="bg-white border border-outline-variant rounded-3xl p-6 shadow-sm space-y-4">
-            <h3 className="font-bold text-sm text-on-surface flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Duration & Start</h3>
+          <Card className="space-y-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+              <Clock className="h-4 w-4 text-primary" /> Duration & Start
+            </h3>
             <div className="flex gap-3">
-              <button type="button" onClick={() => setStartMode('now')}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${startMode === 'now' ? 'bg-primary text-white border-primary' : 'bg-white border-outline-variant text-on-surface-variant'}`}>
+              <Button
+                type="button"
+                fullWidth
+                variant={startMode === 'now' ? 'primary' : 'outline'}
+                onClick={() => setStartMode('now')}
+              >
                 Start Now
-              </button>
-              <button type="button" onClick={() => setStartMode('schedule')}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${startMode === 'schedule' ? 'bg-primary text-white border-primary' : 'bg-white border-outline-variant text-on-surface-variant'}`}>
+              </Button>
+              <Button
+                type="button"
+                fullWidth
+                variant={startMode === 'schedule' ? 'primary' : 'outline'}
+                onClick={() => setStartMode('schedule')}
+              >
                 Schedule
-              </button>
+              </Button>
             </div>
 
             {startMode === 'schedule' && (
-              <div className="space-y-1 w-full">
-                <label className="text-xs font-bold text-on-surface">Start Date & Time</label>
-                <input type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)}
-                  className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2.5 text-xs text-on-surface focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              </div>
+              <Input
+                type="datetime-local"
+                label="Start Date & Time"
+                value={scheduledStart}
+                onChange={(e) => setScheduledStart(e.target.value)}
+              />
             )}
 
-            <div className="space-y-1 w-full">
-              <label className="text-xs font-bold text-on-surface">Duration (minutes)</label>
-              <input type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-4 py-2.5 text-xs text-on-surface focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <p className="text-[11px] text-on-surface-variant">The contest ends automatically {durationMinutes || 0} minutes after it starts.</p>
-            </div>
-          </div>
+            <Input
+              type="number"
+              min={1}
+              label="Duration (minutes)"
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 0)}
+              hint={`The contest ends automatically ${durationMinutes || 0} minutes after it starts.`}
+            />
+          </Card>
 
           {/* Question selection */}
-          <div className="bg-white border border-outline-variant rounded-3xl p-6 shadow-sm space-y-3">
+          <Card className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-sm text-on-surface">Select Questions</h3>
-              <span className="text-xs font-bold text-primary">{selected.length} selected</span>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                <ListChecks className="h-4 w-4 text-primary" /> Select Questions
+              </h3>
+              <span className="text-xs font-semibold text-primary">{selected.length} selected</span>
             </div>
 
             {questionsLoading ? (
-              <p className="text-xs text-slate-500">Loading questions…</p>
+              <div className="py-6">
+                <Spinner label="Loading questions…" />
+              </div>
             ) : questions.length === 0 ? (
-              <p className="text-xs text-slate-500">No questions in the bank yet. Create a question first.</p>
+              <EmptyState
+                icon={<Database />}
+                title="No questions yet"
+                description="No questions in the bank yet. Create a question first."
+                action={<Button onClick={() => navigate('/admin/questions/create')}>Create Question</Button>}
+              />
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                 {questions.map((q: any) => {
                   const checked = selected.includes(q.id);
                   return (
-                    <label key={q.id}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? 'border-primary bg-primary/5' : 'border-outline-variant hover:bg-slate-50'}`}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleQuestion(q.id)} className="accent-primary w-4 h-4" />
+                    <label
+                      key={q.id}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all',
+                        checked
+                          ? 'border-primary bg-primary/10'
+                          : 'border-outline-variant hover:bg-surface-container-high'
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleQuestion(q.id)}
+                        className="h-4 w-4 accent-primary"
+                      />
                       <div className="flex-1">
-                        <p className="text-xs font-bold text-on-surface">{q.title}</p>
+                        <p className="text-xs font-semibold text-on-surface">{q.title}</p>
                         <p className="text-[11px] text-on-surface-variant">{q.topic?.name || 'Algorithms'}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        q.difficulty === 'EASY' ? 'bg-emerald-100 text-emerald-800' :
-                        q.difficulty === 'MEDIUM' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                      }`}>{q.difficulty}</span>
+                      <DifficultyBadge difficulty={q.difficulty} />
                     </label>
                   );
                 })}
               </div>
             )}
-          </div>
+          </Card>
 
           <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate('/contests')}>Cancel</Button>
-            <Button type="submit" isLoading={createMutation.isPending} size="lg">
-              <Trophy className="w-4 h-4" /> Create Assessment
+            <Button type="button" variant="outline" onClick={() => navigate('/contests')}>
+              Cancel
+            </Button>
+            <Button type="submit" size="lg" isLoading={createMutation.isPending} leftIcon={<Trophy className="h-4 w-4" />}>
+              Create Assessment
             </Button>
           </div>
         </form>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 };

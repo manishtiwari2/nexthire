@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { Terminal, Lock, Mail, User as UserIcon, Shield, ArrowRight } from 'lucide-react';
+import { Button, Card, Input, Alert } from '../shared/components/ui';
+import { cn } from '../shared/lib/cn';
 
 export const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -24,112 +26,110 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-6 text-on-surface">
-      <div className="w-full max-w-md bg-white border border-outline-variant rounded-3xl p-8 shadow-xl space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 bg-primary-container text-white rounded-2xl flex items-center justify-center mx-auto shadow-md">
-            <Terminal className="w-7 h-7" />
+    <div className="relative min-h-screen bg-background text-on-surface flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+
+      <div className="relative w-full max-w-md space-y-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-elev-2">
+            <Terminal className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-bold text-primary">Create NextHire Account</h1>
-          <p className="text-sm text-on-surface-variant">Join 50,000+ developers mastering technical interviews.</p>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-on-surface">Create your NextHire account</h1>
+            <p className="text-sm text-on-surface-variant">
+              Join 50,000+ developers mastering technical interviews.
+            </p>
+          </div>
         </div>
 
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl text-center font-medium">
-            {error}
-          </div>
-        )}
+        <Card className="p-6 sm:p-8">
+          {error && (
+            <Alert variant="danger" className="mb-4">
+              {error}
+            </Alert>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-on-surface">Full Name</label>
-            <div className="relative">
-              <UserIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="Sarah Jenkins"
-              />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              label="Full Name"
+              type="text"
+              required
+              icon={<UserIcon className="h-4 w-4" />}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Sarah Jenkins"
+            />
+
+            <Input
+              label="Email Address"
+              type="email"
+              required
+              icon={<Mail className="h-4 w-4" />}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="sarah@example.com"
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              required
+              icon={<Lock className="h-4 w-4" />}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-on-surface-variant">Select Persona Role</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRole('CANDIDATE')}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all',
+                    role === 'CANDIDATE'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline'
+                  )}
+                >
+                  <UserIcon className="h-4 w-4" /> Candidate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('ADMIN')}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all',
+                    role === 'ADMIN'
+                      ? 'border-tertiary bg-tertiary-container text-tertiary'
+                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline'
+                  )}
+                >
+                  <Shield className="h-4 w-4" /> Platform Admin
+                </button>
+              </div>
             </div>
+
+            <Button
+              type="submit"
+              isLoading={isLoading}
+              disabled={isLoading}
+              fullWidth
+              size="lg"
+              rightIcon={<ArrowRight className="h-4 w-4" />}
+              className="mt-2"
+            >
+              {isLoading ? 'Creating Account...' : 'Register Account'}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-xs text-on-surface-variant">
+            Already have an account?{' '}
+            <Link to="/login" className="font-semibold text-primary hover:underline">
+              Sign in
+            </Link>
           </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-on-surface">Email Address</label>
-            <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="sarah@example.com"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-on-surface">Password</label>
-            <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-surface-container-low border border-outline-variant rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-on-surface">Select Persona Role</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setRole('CANDIDATE')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  role === 'CANDIDATE'
-                    ? 'bg-blue-50 border-primary text-primary shadow-sm'
-                    : 'bg-surface-container-low border-outline-variant text-slate-600'
-                }`}
-              >
-                <UserIcon className="w-4 h-4" /> Candidate
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole('ADMIN')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  role === 'ADMIN'
-                    ? 'bg-purple-50 border-purple-600 text-purple-700 shadow-sm'
-                    : 'bg-surface-container-low border-outline-variant text-slate-600'
-                }`}
-              >
-                <Shield className="w-4 h-4" /> Platform Admin
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 bg-primary hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 mt-4"
-          >
-            <span>{isLoading ? 'Creating Account...' : 'Register Account'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </form>
-
-        <div className="text-center text-xs text-on-surface-variant">
-          Already have an account?{' '}
-          <Link to="/login" className="text-primary font-bold hover:underline">
-            Sign in
-          </Link>
-        </div>
+        </Card>
       </div>
     </div>
   );

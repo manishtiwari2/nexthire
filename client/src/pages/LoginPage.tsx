@@ -1,23 +1,32 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLoginForm } from '../features/auth/components/GoogleLoginForm';
-import { Terminal, Shield } from 'lucide-react';
+import { Terminal } from 'lucide-react';
+import { Card } from '../shared/components/ui';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-6 text-on-surface">
-      <div className="w-full max-w-md bg-white border border-outline-variant rounded-3xl p-8 shadow-xl space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 bg-primary-container text-white rounded-2xl flex items-center justify-center mx-auto shadow-md">
-            <Terminal className="w-7 h-7" />
+    <div className="relative min-h-screen bg-background text-on-surface flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+
+      <div className="relative w-full max-w-md space-y-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-elev-2">
+            <Terminal className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-bold text-primary">NextHire Platform</h1>
-          <p className="text-xs text-on-surface-variant">Sign in with Google OAuth to access candidate features or admin tools.</p>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-on-surface">NextHire</h1>
+            <p className="text-sm text-on-surface-variant">
+              Sign in with Google OAuth to access candidate features or admin tools.
+            </p>
+          </div>
         </div>
 
-        <GoogleLoginForm onSuccess={() => navigate('/contests')} />
+        <Card className="p-6 sm:p-8">
+          <GoogleLoginForm onSuccess={() => navigate('/contests')} />
+        </Card>
       </div>
     </div>
   );
