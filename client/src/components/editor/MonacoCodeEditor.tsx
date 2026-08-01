@@ -3,7 +3,7 @@ import Editor, { OnMount } from '@monaco-editor/react';
 import { useEditorStore, SupportedLanguage, JudgePhase } from '../../store/useEditorStore';
 import {
   Play, RotateCcw, CheckCircle, AlertCircle, Clock, Cpu, Send, Loader2,
-  Minus, Plus, WrapText, Maximize2, Minimize2, Check,
+  Minus, Plus, WrapText, Maximize2, Minimize2, Check, BookOpen,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { io, Socket } from 'socket.io-client';
@@ -13,6 +13,7 @@ import { Button } from '../../shared/components/ui';
 import { cn } from '../../shared/lib/cn';
 import { StarterCode } from '../../shared/lib/starterTemplates';
 import { useEditorSession } from '../../shared/hooks/useEditorSession';
+import { LanguageDocsPanel } from './LanguageDocsPanel';
 
 interface MonacoCodeEditorProps {
   questionId?: string;
@@ -63,6 +64,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
   const [wordWrap, setWordWrap] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
 
   // Per-(question, language) draft load + autosave + result reset. Fixes the contest IDE,
   // which previously shared one global buffer across every problem.
@@ -157,7 +159,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-2',
+        'relative flex flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-2',
         fullscreen ? 'fixed inset-2 z-50 h-auto' : 'h-full'
       )}
     >
@@ -226,6 +228,15 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             </span>
           )}
 
+          <button
+            className={cn(iconBtn, showDocs && 'border-primary/40 bg-primary/12 text-primary')}
+            onClick={() => setShowDocs((d) => !d)}
+            title="Language reference (I/O & syntax cheatsheet)"
+            aria-label="Toggle language reference"
+            aria-pressed={showDocs}
+          >
+            <BookOpen className="h-4 w-4" />
+          </button>
           <button className={cn(iconBtn)} onClick={resetToStarter} title="Reset to starter code" aria-label="Reset to starter code">
             <RotateCcw className="h-4 w-4" />
           </button>
@@ -395,6 +406,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           )}
         </div>
       )}
+
+      {/* Slide-over language reference (generic syntax help, never solution hints) */}
+      <LanguageDocsPanel open={showDocs} language={language} onClose={() => setShowDocs(false)} />
     </div>
   );
 };
