@@ -84,6 +84,18 @@ export interface ProgressStats {
   recent: Array<{ questionId: string; status: ProgressStatus; lastPracticedAt: string }>;
 }
 
+export interface ActivityStats {
+  calendar: Record<string, number>;
+  currentStreak: number;
+  longestStreak: number;
+  todayCount: number;
+  weekCount: number;
+  monthCount: number;
+  totalActiveDays: number;
+  totalSubmissions: number;
+  windowDays: number;
+}
+
 export interface Collection {
   id: string;
   name: string;

@@ -13,6 +13,8 @@
  * @param {object} prisma  Prisma client (real one from shared/db)
  * @param {{userId:string, questionId:string, status:string}} outcome  status = SubmissionStatus
  */
+const { enqueueForRevision } = require('../revision/revisionService');
+
 async function recordSubmissionOutcome(prisma, { userId, questionId, status }) {
   if (!prisma || !prisma.userQuestionProgress || !userId || !questionId) return;
 
@@ -34,6 +36,8 @@ async function recordSubmissionOutcome(prisma, { userId, questionId, status }) {
         lastPracticedAt: now
       }
     });
+    // First-ever solve → seed the spaced-repetition ladder so the revision queue self-fills.
+    if (accepted) await enqueueForRevision(prisma, { userId, questionId });
     return;
   }
 
@@ -57,6 +61,11 @@ async function recordSubmissionOutcome(prisma, { userId, questionId, status }) {
   }
 
   await prisma.userQuestionProgress.update({ where: key, data });
+
+  // First solve on a previously-attempted question also seeds the revision ladder.
+  if (accepted && !existing.firstSolvedAt) {
+    await enqueueForRevision(prisma, { userId, questionId });
+  }
 }
 
 module.exports = { recordSubmissionOutcome };

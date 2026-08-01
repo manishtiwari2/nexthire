@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp } from 'lucide-react';
+import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp, LayoutDashboard, RotateCcw } from 'lucide-react';
 import { cn } from '../../shared/lib/cn';
 
 interface NavItem {
@@ -10,10 +10,15 @@ interface NavItem {
   icon: React.ElementType;
 }
 
+const homeNav: NavItem[] = [
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+];
+
 const libraryNav: NavItem[] = [
   { name: 'Question Library', path: '/library', icon: Library },
   { name: 'Study Sheets', path: '/sheets', icon: ListChecks },
   { name: 'Practice', path: '/practice', icon: Dumbbell },
+  { name: 'Revision', path: '/revision', icon: RotateCcw },
   { name: 'My Progress', path: '/progress', icon: TrendingUp },
 ];
 
@@ -89,6 +94,30 @@ export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
 
       {/* Nav */}
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+        <div className="space-y-1">
+          {homeNav.map(({ name, path, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary/12 text-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-primary' : 'text-on-surface-muted group-hover:text-on-surface')} />
+                  <span>{name}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
         <NavSection label="Library" items={libraryNav} onNavigate={onNavigate} />
         <NavSection label="Workspace" items={candidateNav} onNavigate={onNavigate} />
         {isAdmin && (

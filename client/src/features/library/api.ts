@@ -4,7 +4,7 @@
 
 import { apiClient } from '../../api/client';
 import type {
-  QuestionCard, SheetSummary, SheetDetail, NoteDto, ProgressStats, Collection, ProgressDto
+  QuestionCard, SheetSummary, SheetDetail, NoteDto, ProgressStats, Collection, ProgressDto, ActivityStats
 } from './types';
 
 interface Envelope<T> { data: T; pagination?: { total: number; page: number; limit: number; totalPages: number } }
@@ -62,6 +62,10 @@ export async function removeSheetItem(id: string, questionId: string) {
 // ---- Progress ----
 export async function fetchProgressStats() {
   const res = (await apiClient.get('/library/progress/stats')) as Envelope<ProgressStats>;
+  return res.data;
+}
+export async function fetchActivity() {
+  const res = (await apiClient.get('/library/progress/activity')) as Envelope<ActivityStats>;
   return res.data;
 }
 export async function fetchProgressList(params?: { status?: string; bookmarked?: string }) {

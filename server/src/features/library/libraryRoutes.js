@@ -23,6 +23,7 @@ router.put('/sheets/:id/reorder', requireAuthenticated, sheets.reorderSheet);
 // ---- Progress (always personal) ----
 router.get('/progress', requireAuthenticated, progress.listProgress);
 router.get('/progress/stats', requireAuthenticated, progress.getStats);
+router.get('/progress/activity', requireAuthenticated, progress.getActivity);
 router.patch('/progress/:questionId', requireAuthenticated, progress.setStatus);
 router.post('/progress/:questionId/bookmark', requireAuthenticated, progress.toggleBookmark);
 

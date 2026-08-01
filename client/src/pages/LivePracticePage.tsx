@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { MonacoCodeEditor } from '../components/editor/MonacoCodeEditor';
 import { SubmissionHistoryPanel } from '../features/question-bank/components/SubmissionHistoryPanel';
 import { RevisionScheduleCard } from '../features/revision/components/RevisionScheduleCard';
-import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw, NotebookPen, Target, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw, NotebookPen,
+  Target, ExternalLink, MessagesSquare, GripVertical, Gauge, Timer,
+} from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore';
 import { Spinner, EmptyState, Alert, Tabs, Button } from '../shared/components/ui';
 import { DifficultyBadge } from '../shared/components/ui';
@@ -19,7 +22,24 @@ import { useAuthStore } from '../store/useAuthStore';
 
 const SourceLabel = (platform?: keyof typeof SOURCE_LABELS) => (platform && SOURCE_LABELS[platform]) || 'the source platform';
 
-type PracticeTab = 'description' | 'hints' | 'editorial' | 'history' | 'revision' | 'notes' | 'progress';
+type PracticeTab = 'description' | 'editorial' | 'discussion' | 'hints' | 'notes' | 'progress' | 'history' | 'revision';
+
+const SPLIT_KEY = 'nh_problem_split';
+const clampPct = (n: number) => Math.max(28, Math.min(68, n));
+
+/** True when the viewport is at the `lg` breakpoint (where the split view is horizontal). */
+function useIsDesktop() {
+  const [isLg, setIsLg] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true
+  );
+  useEffect(() => {
+    const m = window.matchMedia('(min-width: 1024px)');
+    const handler = () => setIsLg(m.matches);
+    m.addEventListener('change', handler);
+    return () => m.removeEventListener('change', handler);
+  }, []);
+  return isLg;
+}
 
 export const LivePracticePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +47,39 @@ export const LivePracticePage: React.FC = () => {
   const { setCode } = useEditorStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const isDesktop = useIsDesktop();
+
+  // Resizable split (persisted). Only meaningful on desktop; mobile stacks vertically.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [leftPct, setLeftPct] = useState(() => clampPct(parseFloat(localStorage.getItem(SPLIT_KEY) || '44')));
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      setLeftPct(clampPct(((e.clientX - rect.left) / rect.width) * 100));
+    };
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+  useEffect(() => { localStorage.setItem(SPLIT_KEY, String(Math.round(leftPct))); }, [leftPct]);
+
+  const startDrag = () => {
+    draggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['question', id],
@@ -34,7 +87,6 @@ export const LivePracticePage: React.FC = () => {
     enabled: !!id,
   });
 
-  // Fetch past submission history for candidate
   const { data: submissionsData, isLoading: isSubmissionsLoading } = useQuery({
     queryKey: ['submissions', id],
     queryFn: () => apiClient.get(`/questions/${id}/submissions`),
@@ -43,18 +95,16 @@ export const LivePracticePage: React.FC = () => {
 
   const question = data?.data;
   const submissions = submissionsData?.data || [];
-
-  // Draft load / autosave / starter code are owned by the editor (useEditorSession), so a
-  // question's code, verdict, and per-language drafts stay correctly isolated everywhere.
-
   const isExternal = !!question?.isExternalOnly;
+
   const tabItems = [
     { value: 'description' as const, label: 'Description', icon: <FileText /> },
+    { value: 'editorial' as const, label: 'Editorial', icon: <BookOpen /> },
+    { value: 'discussion' as const, label: 'Discussion', icon: <MessagesSquare /> },
+    { value: 'hints' as const, label: 'Hints', icon: <Lightbulb />, count: question?.hints?.length || 0 },
     { value: 'notes' as const, label: 'Notes', icon: <NotebookPen /> },
     { value: 'progress' as const, label: 'Progress', icon: <Target /> },
-    { value: 'hints' as const, label: 'Hints', icon: <Lightbulb />, count: question?.hints?.length || 0 },
-    { value: 'editorial' as const, label: 'Editorial', icon: <BookOpen /> },
-    { value: 'history' as const, label: 'History', icon: <History /> },
+    { value: 'history' as const, label: 'History', icon: <History />, count: submissions.length || 0 },
     { value: 'revision' as const, label: 'SM-2', icon: <RotateCcw /> },
   ];
 
@@ -80,7 +130,17 @@ export const LivePracticePage: React.FC = () => {
           {question && <DifficultyBadge difficulty={question.difficulty} />}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5 text-xs text-on-surface-muted">
+        <div className="flex shrink-0 items-center gap-3 text-xs text-on-surface-muted">
+          {typeof question?.acceptanceRate === 'number' && (
+            <span className="hidden items-center gap-1 lg:flex" title="Acceptance rate">
+              <Gauge className="h-3.5 w-3.5 text-success" /> {Math.round(question.acceptanceRate)}%
+            </span>
+          )}
+          {question?.estimatedTimeMin && (
+            <span className="hidden items-center gap-1 md:flex" title="Estimated solve time">
+              <Timer className="h-3.5 w-3.5 text-tertiary" /> ~{question.estimatedTimeMin}m
+            </span>
+          )}
           <span className="hidden items-center gap-1 font-mono md:flex" title="Time limit per test case">
             <Clock className="h-3.5 w-3.5 text-primary" /> {question?.timeLimitMs || 2000}ms
           </span>
@@ -88,9 +148,15 @@ export const LivePracticePage: React.FC = () => {
       </header>
 
       {/* Split body */}
-      <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
+      <div
+        ref={containerRef}
+        className="flex flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-0 lg:p-4"
+      >
         {/* Left: details & tabs */}
-        <div className="flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-1 lg:h-full lg:w-[44%]">
+        <div
+          className="flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-1 lg:h-full"
+          style={isDesktop ? { width: `${leftPct}%` } : undefined}
+        >
           <div className="shrink-0 border-b border-outline-variant px-4">
             <Tabs<PracticeTab> value={activeTab} onChange={setActiveTab} items={tabItems} size="sm" />
           </div>
@@ -117,6 +183,39 @@ export const LivePracticePage: React.FC = () => {
                   </Alert>
                 )}
                 <ProblemStatement question={question} />
+              </div>
+            ) : activeTab === 'editorial' ? (
+              question.editorial ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-on-surface">Official Editorial</h3>
+                  <MarkdownContent content={question.editorial.content} />
+                  {question.editorial.solution && (
+                    <pre className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-3 font-mono text-[11px] text-on-surface">
+                      {question.editorial.solution}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <EmptyState icon={<BookOpen />} title="No editorial yet" description="The official editorial hasn't been published for this problem." />
+              )
+            ) : activeTab === 'discussion' ? (
+              <EmptyState
+                icon={<MessagesSquare />}
+                title="Discussion coming soon"
+                description="Community solutions and discussion threads will appear here. For now, jot your own approach in the Notes tab."
+                action={<Button size="sm" variant="outline" onClick={() => setActiveTab('notes')}>Open Notes</Button>}
+              />
+            ) : activeTab === 'hints' ? (
+              <div className="space-y-3">
+                {question.hints && question.hints.length > 0 ? (
+                  question.hints.map((h: any, i: number) => (
+                    <Alert key={h.id || i} variant="warning" title={`Hint #${i + 1}`}>
+                      {h.content}
+                    </Alert>
+                  ))
+                ) : (
+                  <EmptyState icon={<Lightbulb />} title="No hints available" description="This problem doesn't have hints yet." />
+                )}
               </div>
             ) : activeTab === 'notes' ? (
               user ? <NotesPanel questionId={id || ''} /> : <EmptyState icon={<NotebookPen />} title="Sign in to take notes" description="Your private preparation notes are saved per account." />
@@ -147,32 +246,6 @@ export const LivePracticePage: React.FC = () => {
                   </div>
                 </div>
               ) : <EmptyState icon={<Target />} title="Sign in to track progress" description="Solving, attempts, and bookmarks are saved per account." />
-            ) : activeTab === 'hints' ? (
-              <div className="space-y-3">
-                {question.hints && question.hints.length > 0 ? (
-                  question.hints.map((h: any, i: number) => (
-                    <Alert key={h.id || i} variant="warning" title={`Hint #${i + 1}`}>
-                      {h.content}
-                    </Alert>
-                  ))
-                ) : (
-                  <EmptyState icon={<Lightbulb />} title="No hints available" description="This problem doesn't have hints yet." />
-                )}
-              </div>
-            ) : activeTab === 'editorial' ? (
-              question.editorial ? (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-on-surface">Official Editorial</h3>
-                  <MarkdownContent content={question.editorial.content} />
-                  {question.editorial.solution && (
-                    <pre className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-3 font-mono text-[11px] text-on-surface">
-                      {question.editorial.solution}
-                    </pre>
-                  )}
-                </div>
-              ) : (
-                <EmptyState icon={<BookOpen />} title="No editorial yet" description="The official editorial hasn't been published for this problem." />
-              )
             ) : activeTab === 'history' ? (
               <SubmissionHistoryPanel
                 submissions={submissions}
@@ -182,6 +255,22 @@ export const LivePracticePage: React.FC = () => {
             ) : (
               <RevisionScheduleCard questionId={id || ''} />
             )}
+          </div>
+        </div>
+
+        {/* Drag handle (desktop only) */}
+        <div
+          onMouseDown={startDrag}
+          onDoubleClick={() => setLeftPct(44)}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panels (double-click to reset)"
+          title="Drag to resize · double-click to reset"
+          className="group relative hidden w-2 shrink-0 cursor-col-resize items-center justify-center lg:flex"
+        >
+          <div className="h-full w-px bg-outline-variant transition-colors group-hover:bg-primary" />
+          <div className="absolute flex h-9 w-3.5 items-center justify-center rounded bg-surface-container-high opacity-0 shadow-elev-1 transition-opacity group-hover:opacity-100">
+            <GripVertical className="h-3.5 w-3.5 text-on-surface-muted" />
           </div>
         </div>
 

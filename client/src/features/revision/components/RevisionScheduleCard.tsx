@@ -23,7 +23,9 @@ export const RevisionScheduleCard: React.FC<RevisionScheduleCardProps> = ({ ques
   const reviewMutation = useMutation({
     mutationFn: (quality: number) => apiClient.post('/revision/review', { questionId, quality }),
     onSuccess: (res: any) => {
-      queryClient.invalidateQueries({ queryKey: ['due-revisions'] });
+      ['due-revisions', 'revision', 'revision-queue', 'progress-stats'].forEach((k) =>
+        queryClient.invalidateQueries({ queryKey: [k] })
+      );
       const nextDate = new Date(res.data.nextReviewAt).toLocaleDateString();
       setSuccessMsg(`Revision scheduled! Next review due on ${nextDate}`);
       setTimeout(() => setSuccessMsg(''), 4000);

@@ -20,6 +20,8 @@ const StudySheetsPage = React.lazy(() => import('./pages/StudySheetsPage').then(
 const StudySheetDetailPage = React.lazy(() => import('./pages/StudySheetDetailPage').then(m => ({ default: m.StudySheetDetailPage })));
 const PracticePage = React.lazy(() => import('./pages/PracticePage').then(m => ({ default: m.PracticePage })));
 const ProgressPage = React.lazy(() => import('./pages/ProgressPage').then(m => ({ default: m.ProgressPage })));
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const RevisionPage = React.lazy(() => import('./pages/RevisionPage').then(m => ({ default: m.RevisionPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,7 +52,8 @@ export const App: React.FC = () => {
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Navigate to="/contests" replace />} />
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/contests" element={<ContestsPage />} />
                 <Route path="/contest/:id" element={<LiveContestIDEPage />} />
                 <Route path="/admin/contests/create" element={<AdminCreateContestPage />} />
@@ -61,11 +64,12 @@ export const App: React.FC = () => {
                 <Route path="/sheets" element={<StudySheetsPage />} />
                 <Route path="/sheets/:slug" element={<StudySheetDetailPage />} />
                 <Route path="/practice" element={<PracticePage />} />
+                <Route path="/revision" element={<RevisionPage />} />
                 <Route path="/progress" element={<ProgressPage />} />
               </Route>
 
               {/* Fallback */}
-              <Route path="*" element={<Navigate to="/contests" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </React.Suspense>
 

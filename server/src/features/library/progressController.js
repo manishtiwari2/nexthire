@@ -106,6 +106,92 @@ async function getStats(req, res) {
   }
 }
 
+// GET /library/progress/activity — submission heatmap + streaks for the dashboard.
+// Buckets the caller's submissions by UTC day over the last ~26 weeks and derives
+// current/longest streaks plus rolling week/month totals. No new tables needed.
+async function getActivity(req, res) {
+  try {
+    const userId = req.user.id;
+    const WINDOW_DAYS = 182; // 26 weeks — enough for a GitHub-style heatmap.
+
+    const iso = (d) => d.toISOString().slice(0, 10);
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setUTCDate(since.getUTCDate() - (WINDOW_DAYS - 1));
+
+    const subs = await prisma.submission.findMany({
+      where: { userId, createdAt: { gte: since } },
+      select: { createdAt: true }
+    });
+
+    // Count submissions per UTC day.
+    const calendar = {};
+    for (const s of subs) {
+      const key = iso(new Date(s.createdAt));
+      calendar[key] = (calendar[key] || 0) + 1;
+    }
+
+    // Current streak: consecutive active days ending today (with a one-day grace
+    // so an unfinished today doesn't visually break the streak).
+    let currentStreak = 0;
+    const cursor = new Date();
+    cursor.setUTCHours(0, 0, 0, 0);
+    if (!calendar[iso(cursor)]) cursor.setUTCDate(cursor.getUTCDate() - 1);
+    while (calendar[iso(cursor)]) {
+      currentStreak += 1;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+
+    // Longest streak within the window.
+    const activeDays = Object.keys(calendar).sort();
+    let longestStreak = 0;
+    let run = 0;
+    let prev = null;
+    for (const day of activeDays) {
+      if (prev) {
+        const gap = (new Date(day) - new Date(prev)) / 86400000;
+        run = gap === 1 ? run + 1 : 1;
+      } else {
+        run = 1;
+      }
+      if (run > longestStreak) longestStreak = run;
+      prev = day;
+    }
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const daysAgo = (n) => {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - n);
+      return iso(d);
+    };
+    let weekCount = 0;
+    let monthCount = 0;
+    for (let i = 0; i < 30; i += 1) {
+      const c = calendar[daysAgo(i)] || 0;
+      if (i < 7) weekCount += c;
+      monthCount += c;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        calendar,
+        currentStreak,
+        longestStreak,
+        todayCount: calendar[iso(today)] || 0,
+        weekCount,
+        monthCount,
+        totalActiveDays: activeDays.length,
+        totalSubmissions: subs.length,
+        windowDays: WINDOW_DAYS
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 // PATCH /library/progress/:questionId — manually set status (TODO/ATTEMPTED/SOLVED).
 async function setStatus(req, res) {
   try {
@@ -157,4 +243,4 @@ async function toggleBookmark(req, res) {
   }
 }
 
-module.exports = { listProgress, getStats, setStatus, toggleBookmark };
+module.exports = { listProgress, getStats, getActivity, setStatus, toggleBookmark };
