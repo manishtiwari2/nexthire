@@ -13,7 +13,13 @@ import {
   Card,
   SectionHeader,
 } from '../shared/components/ui';
-import { Database, Plus, Trash2, FileText, FlaskConical, Code2, BookOpen } from 'lucide-react';
+import { Database, Plus, Trash2, FileText, FlaskConical, Code2, BookOpen, Tags } from 'lucide-react';
+
+const SOURCE_OPTIONS = [
+  ['CUSTOM', 'Original / Custom'], ['LEETCODE', 'LeetCode'], ['GEEKSFORGEEKS', 'GeeksforGeeks'],
+  ['HACKERRANK', 'HackerRank'], ['CODEFORCES', 'Codeforces'], ['CODECHEF', 'CodeChef'],
+  ['ATCODER', 'AtCoder'], ['INTERVIEWBIT', 'InterviewBit']
+] as const;
 
 interface TestCaseDraft {
   input: string;
@@ -49,6 +55,20 @@ export const AdminCreateQuestionPage: React.FC = () => {
   ]);
   const [editorialContent, setEditorialContent] = useState('');
 
+  // --- Library metadata ---
+  const [subtopics, setSubtopics] = useState('');
+  const [companyTags, setCompanyTags] = useState('');
+  const [frequencyBand, setFrequencyBand] = useState('');
+  const [estimatedTimeMin, setEstimatedTimeMin] = useState('');
+  const [sourcePlatform, setSourcePlatform] = useState('CUSTOM');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [originalAuthor, setOriginalAuthor] = useState('');
+  const [authorNotes, setAuthorNotes] = useState('');
+  const [contentStatus, setContentStatus] = useState('PUBLISHED');
+  const [isExternalOnly, setIsExternalOnly] = useState(false);
+
+  const csv = (s: string) => s.split(',').map((v) => v.trim()).filter(Boolean);
+
   const createMutation = useMutation({
     mutationFn: (payload: any) => apiClient.post('/questions', payload),
     onSuccess: () => {
@@ -69,8 +89,41 @@ export const AdminCreateQuestionPage: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) {
-      addToast('Missing Details', 'Title and description are required', 'warning');
+    if (!title.trim()) {
+      addToast('Missing Details', 'Title is required', 'warning');
+      return;
+    }
+
+    const metadata = {
+      subtopics: csv(subtopics),
+      companyTags: csv(companyTags),
+      frequencyBand: frequencyBand || undefined,
+      estimatedTimeMin: estimatedTimeMin ? Number(estimatedTimeMin) : undefined,
+      sourcePlatform,
+      sourceUrl: sourceUrl.trim() || undefined,
+      originalAuthor: originalAuthor.trim() || undefined,
+      authorNotes: authorNotes.trim() || undefined,
+      contentStatus,
+      isExternalOnly
+    };
+
+    // External references carry metadata + a link only — no local statement, tests, or judge.
+    if (isExternalOnly) {
+      if (!sourceUrl.trim()) {
+        addToast('Missing Source URL', 'External references need a source link', 'warning');
+        return;
+      }
+      createMutation.mutate({
+        title: title.trim(),
+        difficulty,
+        topicName: topicName.trim() || 'Algorithms',
+        ...metadata
+      });
+      return;
+    }
+
+    if (!description.trim()) {
+      addToast('Missing Details', 'Description is required for a solvable problem', 'warning');
       return;
     }
     const validCases = testCases.filter((tc) => tc.expectedOutput.trim() !== '' || tc.input.trim() !== '');
@@ -102,7 +155,8 @@ export const AdminCreateQuestionPage: React.FC = () => {
         isSample: tc.isSample,
         orderIndex: i
       })),
-      ...(editorialContent.trim() ? { editorialContent: editorialContent.trim() } : {})
+      ...(editorialContent.trim() ? { editorialContent: editorialContent.trim() } : {}),
+      ...metadata
     });
   };
 
@@ -169,6 +223,56 @@ export const AdminCreateQuestionPage: React.FC = () => {
                 onChange={(e) => setMemoryLimitMb(parseInt(e.target.value, 10) || 256)}
               />
             </div>
+          </Card>
+
+          {/* Library metadata */}
+          <Card className="space-y-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+              <Tags className="h-4 w-4 text-primary" /> Library Metadata{' '}
+              <span className="font-normal text-on-surface-variant">(optional)</span>
+            </h3>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Subtopics (comma-separated)" value={subtopics} onChange={(e) => setSubtopics(e.target.value)} placeholder="Hashing, Two Pointers" />
+              <Input label="Company tags (comma-separated)" value={companyTags} onChange={(e) => setCompanyTags(e.target.value)} placeholder="Google, Amazon" />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Select label="Frequency" value={frequencyBand} onChange={(e) => setFrequencyBand(e.target.value)}>
+                <option value="">Unset</option>
+                <option value="VERY_HIGH">Very High</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </Select>
+              <Input type="number" min={1} label="Est. solve time (min)" value={estimatedTimeMin} onChange={(e) => setEstimatedTimeMin(e.target.value)} placeholder="30" />
+              <Select label="Revision status" value={contentStatus} onChange={(e) => setContentStatus(e.target.value)}>
+                <option value="PUBLISHED">Published</option>
+                <option value="DRAFT">Draft</option>
+                <option value="IN_REVIEW">In review</option>
+                <option value="ARCHIVED">Archived</option>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select label="Source platform" value={sourcePlatform} onChange={(e) => setSourcePlatform(e.target.value)}>
+                {SOURCE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </Select>
+              <Input label="Source URL" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://leetcode.com/problems/…" />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Original author" value={originalAuthor} onChange={(e) => setOriginalAuthor(e.target.value)} placeholder="Author / attribution" />
+              <Input label="Author notes" value={authorNotes} onChange={(e) => setAuthorNotes(e.target.value)} placeholder="Internal notes" />
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-outline-variant p-3">
+              <input type="checkbox" checked={isExternalOnly} onChange={(e) => setIsExternalOnly(e.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" />
+              <span className="text-sm">
+                <span className="font-semibold text-on-surface">External reference only</span>
+                <span className="block text-xs text-on-surface-variant">Store metadata + a source link, no local statement/tests. Solvers open the source platform. Requires a source URL.</span>
+              </span>
+            </label>
           </Card>
 
           {/* Test cases */}

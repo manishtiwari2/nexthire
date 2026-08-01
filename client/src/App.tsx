@@ -15,6 +15,11 @@ const LiveContestIDEPage = React.lazy(() => import('./pages/LiveContestIDEPage')
 const AdminCreateContestPage = React.lazy(() => import('./pages/AdminCreateContestPage').then(m => ({ default: m.AdminCreateContestPage })));
 const AdminCreateQuestionPage = React.lazy(() => import('./pages/AdminCreateQuestionPage').then(m => ({ default: m.AdminCreateQuestionPage })));
 const ForbiddenPage = React.lazy(() => import('./pages/ForbiddenPage').then(m => ({ default: m.ForbiddenPage })));
+const LibraryPage = React.lazy(() => import('./pages/LibraryPage').then(m => ({ default: m.LibraryPage })));
+const StudySheetsPage = React.lazy(() => import('./pages/StudySheetsPage').then(m => ({ default: m.StudySheetsPage })));
+const StudySheetDetailPage = React.lazy(() => import('./pages/StudySheetDetailPage').then(m => ({ default: m.StudySheetDetailPage })));
+const PracticePage = React.lazy(() => import('./pages/PracticePage').then(m => ({ default: m.PracticePage })));
+const ProgressPage = React.lazy(() => import('./pages/ProgressPage').then(m => ({ default: m.ProgressPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +57,11 @@ export const App: React.FC = () => {
                 <Route path="/admin/questions/create" element={<AdminCreateQuestionPage />} />
                 <Route path="/questions" element={<QuestionBankPage />} />
                 <Route path="/questions/:id" element={<LivePracticePage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/sheets" element={<StudySheetsPage />} />
+                <Route path="/sheets/:slug" element={<StudySheetDetailPage />} />
+                <Route path="/practice" element={<PracticePage />} />
+                <Route path="/progress" element={<ProgressPage />} />
               </Route>
 
               {/* Fallback */}

@@ -5,19 +5,27 @@ import { apiClient } from '../api/client';
 import { MonacoCodeEditor } from '../components/editor/MonacoCodeEditor';
 import { SubmissionHistoryPanel } from '../features/question-bank/components/SubmissionHistoryPanel';
 import { RevisionScheduleCard } from '../features/revision/components/RevisionScheduleCard';
-import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw, NotebookPen, Target, ExternalLink } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore';
-import { Spinner, EmptyState, Alert, Tabs } from '../shared/components/ui';
+import { Spinner, EmptyState, Alert, Tabs, Button } from '../shared/components/ui';
 import { DifficultyBadge } from '../shared/components/ui';
 import { ProblemStatement } from '../shared/components/ProblemStatement';
 import { MarkdownContent } from '../shared/components/MarkdownContent';
+import { NotesPanel } from '../features/library/components/NotesPanel';
+import { ProgressStatusControl } from '../features/library/components/ProgressStatusControl';
+import { BookmarkButton } from '../features/library/components/BookmarkButton';
+import { SourceBadge, SOURCE_LABELS } from '../features/library/components/MetadataBadges';
+import { useAuthStore } from '../store/useAuthStore';
 
-type PracticeTab = 'description' | 'hints' | 'editorial' | 'history' | 'revision';
+const SourceLabel = (platform?: keyof typeof SOURCE_LABELS) => (platform && SOURCE_LABELS[platform]) || 'the source platform';
+
+type PracticeTab = 'description' | 'hints' | 'editorial' | 'history' | 'revision' | 'notes' | 'progress';
 
 export const LivePracticePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<PracticeTab>('description');
   const { setCode } = useEditorStore();
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -39,8 +47,11 @@ export const LivePracticePage: React.FC = () => {
   // Draft load / autosave / starter code are owned by the editor (useEditorSession), so a
   // question's code, verdict, and per-language drafts stay correctly isolated everywhere.
 
+  const isExternal = !!question?.isExternalOnly;
   const tabItems = [
     { value: 'description' as const, label: 'Description', icon: <FileText /> },
+    { value: 'notes' as const, label: 'Notes', icon: <NotebookPen /> },
+    { value: 'progress' as const, label: 'Progress', icon: <Target /> },
     { value: 'hints' as const, label: 'Hints', icon: <Lightbulb />, count: question?.hints?.length || 0 },
     { value: 'editorial' as const, label: 'Editorial', icon: <BookOpen /> },
     { value: 'history' as const, label: 'History', icon: <History /> },
@@ -92,7 +103,50 @@ export const LivePracticePage: React.FC = () => {
             ) : !question ? (
               <EmptyState icon={<Code2 />} title="Question not found" description="This problem may have been removed." />
             ) : activeTab === 'description' ? (
-              <ProblemStatement question={question} />
+              <div className="space-y-4">
+                {isExternal && (
+                  <Alert variant="info" title="External problem">
+                    <div className="space-y-2">
+                      <p>NextHire stores only this problem's metadata and a link — the full statement lives on {SourceLabel(question.sourcePlatform)}.</p>
+                      {question.sourceUrl && (
+                        <a href={question.sourceUrl} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="primary" rightIcon={<ExternalLink className="h-3.5 w-3.5" />}>Open on source</Button>
+                        </a>
+                      )}
+                    </div>
+                  </Alert>
+                )}
+                <ProblemStatement question={question} />
+              </div>
+            ) : activeTab === 'notes' ? (
+              user ? <NotesPanel questionId={id || ''} /> : <EmptyState icon={<NotebookPen />} title="Sign in to take notes" description="Your private preparation notes are saved per account." />
+            ) : activeTab === 'progress' ? (
+              user ? (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-on-surface">Mark your status</span>
+                    <BookmarkButton questionId={id || ''} bookmarked={question.personal?.progress?.isBookmarked} invalidate={[['question', id]]} />
+                  </div>
+                  <ProgressStatusControl
+                    questionId={id || ''}
+                    status={question.personal?.progress?.status}
+                    invalidate={[['question', id]]}
+                  />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-outline-variant bg-surface-container p-3">
+                      <p className="text-xs uppercase tracking-wide text-on-surface-muted">Attempts</p>
+                      <p className="text-lg font-bold text-on-surface">{question.personal?.progress?.attempts ?? 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-outline-variant bg-surface-container p-3">
+                      <p className="text-xs uppercase tracking-wide text-on-surface-muted">Accepted</p>
+                      <p className="text-lg font-bold text-on-surface">{question.personal?.progress?.acceptedCount ?? 0}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SourceBadge platform={question.sourcePlatform} url={question.sourceUrl} />
+                  </div>
+                </div>
+              ) : <EmptyState icon={<Target />} title="Sign in to track progress" description="Solving, attempts, and bookmarks are saved per account." />
             ) : activeTab === 'hints' ? (
               <div className="space-y-3">
                 {question.hints && question.hints.length > 0 ? (
@@ -131,13 +185,35 @@ export const LivePracticePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Monaco editor */}
+        {/* Right: Monaco editor (or, for external references, a link-out panel) */}
         <div className="min-h-[360px] flex-1 lg:h-full">
-          <MonacoCodeEditor
-            questionId={id}
-            starterCodes={question?.starterCodes}
-            onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['submissions', id] })}
-          />
+          {isExternal ? (
+            <div className="flex h-full items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 shadow-elev-1">
+              <div className="max-w-sm text-center">
+                <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+                  <ExternalLink className="h-6 w-6" />
+                </span>
+                <h3 className="text-base font-semibold text-on-surface">Solve on the source platform</h3>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  This is an external reference. Open it on {SourceLabel(question.sourcePlatform)} to read the full statement and submit there — then track your progress and notes here.
+                </p>
+                {question.sourceUrl && (
+                  <a href={question.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block">
+                    <Button variant="primary" rightIcon={<ExternalLink className="h-4 w-4" />}>Open problem</Button>
+                  </a>
+                )}
+                <p className="mt-4 text-xs text-on-surface-muted">
+                  Use the <span className="font-medium text-on-surface">Progress</span> and <span className="font-medium text-on-surface">Notes</span> tabs to record how it went.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <MonacoCodeEditor
+              questionId={id}
+              starterCodes={question?.starterCodes}
+              onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['submissions', id] })}
+            />
+          )}
         </div>
       </div>
     </div>

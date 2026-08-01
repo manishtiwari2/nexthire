@@ -24,6 +24,20 @@ function requireAuthenticated(req, res, next) {
   });
 }
 
+// Soft authentication: if a valid bearer token is present, attach `req.user`; otherwise
+// continue anonymously. Lets public endpoints (e.g. browsing the library) personalise
+// results for signed-in users without rejecting anonymous visitors.
+function attachUser(req, _res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return next();
+
+  jwt.verify(token, EFFECTIVE_JWT_SECRET, (err, decoded) => {
+    if (!err) req.user = decoded;
+    next();
+  });
+}
+
 function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'ADMIN') {
     return res.status(403).json({ success: false, error: 'Requires ADMIN permission' });
@@ -95,6 +109,7 @@ async function requireInterviewHost(req, res, next) {
 
 module.exports = {
   requireAuthenticated,
+  attachUser,
   requireAdmin,
   requireContestParticipant,
   requireContestHost,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X } from 'lucide-react';
+import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp } from 'lucide-react';
 import { cn } from '../../shared/lib/cn';
 
 interface NavItem {
@@ -9,6 +9,13 @@ interface NavItem {
   path: string;
   icon: React.ElementType;
 }
+
+const libraryNav: NavItem[] = [
+  { name: 'Question Library', path: '/library', icon: Library },
+  { name: 'Study Sheets', path: '/sheets', icon: ListChecks },
+  { name: 'Practice', path: '/practice', icon: Dumbbell },
+  { name: 'My Progress', path: '/progress', icon: TrendingUp },
+];
 
 const candidateNav: NavItem[] = [
   { name: 'Assessments', path: '/contests', icon: Trophy },
@@ -82,6 +89,7 @@ export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
 
       {/* Nav */}
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+        <NavSection label="Library" items={libraryNav} onNavigate={onNavigate} />
         <NavSection label="Workspace" items={candidateNav} onNavigate={onNavigate} />
         {isAdmin && (
           <NavSection

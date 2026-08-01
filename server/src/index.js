@@ -9,6 +9,7 @@ const authRoutes = require('./features/auth/authRoutes');
 const questionRoutes = require('./features/question-bank/questionRoutes');
 const contestRoutes = require('./features/contest/contestRoutes');
 const submissionRoutes = require('./features/submission/submissionRoutes');
+const libraryRoutes = require('./features/library/libraryRoutes');
 const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
 const { initJudgeEventRelay } = require('./features/judge/judgeEvents');
@@ -75,12 +76,14 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/questions', questionRoutes);
 app.use('/api/v1/contests', contestRoutes);
 app.use('/api/v1/submissions', submissionRoutes);
+app.use('/api/v1/library', libraryRoutes);
 
 // Backward-compatible aliases
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/contests', contestRoutes);
 app.use('/api/submissions', submissionRoutes);
+app.use('/api/library', libraryRoutes);
 
 // Global Error Handler
 // eslint-disable-next-line no-unused-vars -- Express identifies error middleware by its 4-arg signature.

@@ -1,14 +1,98 @@
 const { prisma } = require('../../shared/db');
 const { dispatchJudgeJob } = require('../judge/judgeDispatch');
 const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
+const { progressMapFor, toProgressDto } = require('../library/libraryHelpers');
+
+const SOURCE_PLATFORMS = ['LEETCODE', 'GEEKSFORGEEKS', 'HACKERRANK', 'CODEFORCES', 'CODECHEF', 'ATCODER', 'INTERVIEWBIT', 'CUSTOM'];
+
+// Return `value` upper-cased if it is one of `allowed`, otherwise null (so callers can default).
+function normalizeEnum(value, allowed) {
+  if (!value) return null;
+  const v = String(value).toUpperCase();
+  return allowed.includes(v) ? v : null;
+}
+
+// Turn an array of company names into CompanyTagMap `create` rows, upserting the tags as needed.
+async function resolveCompanyTags(names) {
+  if (!Array.isArray(names) || names.length === 0) return [];
+  const creates = [];
+  for (const raw of names) {
+    const name = String(raw || '').trim();
+    if (!name) continue;
+    const tag = await prisma.companyTag.upsert({ where: { name }, update: {}, create: { name } });
+    creates.push({ companyTagId: tag.id });
+  }
+  return creates;
+}
+
+// Map a `sort` query param to a Prisma orderBy, keeping nullable metadata columns sorted last.
+function resolveSort(sort) {
+  switch (String(sort || '')) {
+    case 'frequency':
+      return [{ frequencyBand: { sort: 'desc', nulls: 'last' } }, { frequencyScore: { sort: 'desc', nulls: 'last' } }];
+    case 'acceptance':
+      return [{ acceptanceRate: { sort: 'desc', nulls: 'last' } }];
+    case 'estimatedTime':
+      return [{ estimatedTimeMin: { sort: 'asc', nulls: 'last' } }];
+    case 'title':
+      return [{ title: 'asc' }];
+    case 'difficulty':
+      return [{ difficulty: 'asc' }];
+    default:
+      return [{ createdAt: 'desc' }];
+  }
+}
+
+// Build the subset of `where` clauses that depend on the signed-in user's progress
+// (solved/unsolved/attempted/bookmarked/revision-due). No-op for anonymous callers.
+async function personalFilters(userId, query) {
+  if (!userId) return {};
+  const { status, bookmarked, revisionDue } = query;
+  const clause = {};
+
+  if (status || bookmarked === 'true') {
+    const rows = await prisma.userQuestionProgress.findMany({ where: { userId }, select: { questionId: true, status: true, isBookmarked: true } });
+    const solved = rows.filter((r) => r.status === 'SOLVED').map((r) => r.questionId);
+    const attempted = rows.filter((r) => r.status === 'ATTEMPTED').map((r) => r.questionId);
+    const bookmarkedIds = rows.filter((r) => r.isBookmarked).map((r) => r.questionId);
+
+    const s = String(status || '').toLowerCase();
+    if (s === 'solved') clause.id = { in: solved };
+    else if (s === 'unsolved') clause.id = { notIn: solved };
+    else if (s === 'attempted') clause.id = { in: attempted };
+
+    if (bookmarked === 'true') {
+      clause.id = clause.id ? { in: intersect(clause.id, bookmarkedIds) } : { in: bookmarkedIds };
+    }
+  }
+
+  if (revisionDue === 'true') {
+    const due = await prisma.revisionSchedule.findMany({
+      where: { userId, nextReviewAt: { lte: new Date() } },
+      select: { questionId: true }
+    });
+    const dueIds = due.map((r) => r.questionId);
+    clause.id = clause.id?.in ? { in: intersect(clause.id, dueIds) } : { in: dueIds };
+  }
+
+  return clause;
+}
+
+// Intersect an existing `{ in: [...] }` / `{ notIn: [...] }` id clause with another id list.
+function intersect(existing, ids) {
+  if (existing?.in) return existing.in.filter((id) => ids.includes(id));
+  if (existing?.notIn) return ids.filter((id) => !existing.notIn.includes(id));
+  return ids;
+}
 
 async function getQuestions(req, res) {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 10));
     const skip = (page - 1) * limit;
+    const userId = req.user?.id || null;
 
-    const { search, difficulty, topicId, tagId } = req.query;
+    const { search, difficulty, topicId, topicSlug, tagId, companySlug, source, subtopic, frequency } = req.query;
     const where = {};
 
     if (search) {
@@ -17,15 +101,20 @@ async function getQuestions(req, res) {
         { description: { contains: String(search), mode: 'insensitive' } }
       ];
     }
-    if (difficulty) {
-      where.difficulty = String(difficulty).toUpperCase();
+    if (difficulty) where.difficulty = String(difficulty).toUpperCase();
+    if (topicId) where.topicId = String(topicId);
+    if (topicSlug) where.topic = { slug: String(topicSlug) };
+    if (tagId) where.questionTags = { some: { tagId: String(tagId) } };
+    if (source) where.sourcePlatform = String(source).toUpperCase();
+    if (frequency) where.frequencyBand = String(frequency).toUpperCase();
+    if (subtopic) where.subtopics = { has: String(subtopic) };
+    if (companySlug) {
+      where.companyTags = { some: { companyTag: { name: { equals: companyName(String(companySlug)), mode: 'insensitive' } } } };
     }
-    if (topicId) {
-      where.topicId = String(topicId);
-    }
-    if (tagId) {
-      where.questionTags = { some: { tagId: String(tagId) } };
-    }
+
+    // Personal (progress-derived) filters may narrow the id set.
+    const personal = await personalFilters(userId, req.query);
+    if (personal.id) where.id = personal.id;
 
     const [total, questions] = await Promise.all([
       prisma.question.count({ where }),
@@ -41,23 +130,31 @@ async function getQuestions(req, res) {
           questionTags: { include: { tag: true } },
           companyTags: { include: { companyTag: true } }
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: resolveSort(req.query.sort)
       })
     ]);
 
+    // Merge the caller's per-question progress so the client can render status/bookmark badges.
+    const pmap = await progressMapFor(prisma, userId, questions.map((q) => q.id));
+    const data = questions.map((q) => ({
+      ...q,
+      companies: (q.companyTags || []).map((c) => c.companyTag?.name).filter(Boolean),
+      progress: toProgressDto(pmap.get(q.id))
+    }));
+
     res.json({
       success: true,
-      data: questions,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
-      }
+      data,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+}
+
+// Company filters come in as slugs; recover an approximate display name for a case-insensitive match.
+function companyName(slug) {
+  return slug.replace(/-/g, ' ');
 }
 
 async function getQuestionById(req, res) {
@@ -85,7 +182,29 @@ async function getQuestionById(req, res) {
       question.testCases = (question.testCases || []).filter((tc) => tc.isSample);
     }
 
-    res.json({ success: true, data: question });
+    // Attach the caller's personal library state (progress, private note, revision schedule).
+    let personal = null;
+    if (req.user?.id) {
+      const [progressRow, note, revision] = await Promise.all([
+        prisma.userQuestionProgress.findUnique({ where: { userId_questionId: { userId: req.user.id, questionId: question.id } } }),
+        prisma.userQuestionNote.findUnique({ where: { userId_questionId: { userId: req.user.id, questionId: question.id } } }),
+        prisma.revisionSchedule.findUnique({ where: { userId_questionId: { userId: req.user.id, questionId: question.id } } })
+      ]);
+      personal = {
+        progress: toProgressDto(progressRow),
+        note: note || null,
+        revision: revision || null
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...question,
+        companies: (question.companyTags || []).map((c) => c.companyTag?.name).filter(Boolean),
+        personal
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -105,7 +224,20 @@ async function createQuestion(req, res) {
       testCases,
       hints,
       editorialContent,
-      editorialSolution
+      editorialSolution,
+      // --- Library metadata ---
+      subtopics,
+      frequencyBand,
+      frequencyScore,
+      estimatedTimeMin,
+      sourcePlatform,
+      sourceUrl,
+      originalAuthor,
+      authorNotes,
+      contentStatus,
+      acceptanceRate,
+      isExternalOnly,
+      companyTags
     } = req.body;
 
     const slug = (title || 'question').toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -120,16 +252,34 @@ async function createQuestion(req, res) {
       });
     }
 
+    // Resolve company tag names to ids (create tags on first use).
+    const companyTagCreates = await resolveCompanyTags(companyTags);
+    const external = isExternalOnly === true;
+
     const question = await prisma.question.create({
       data: {
         title,
         slug: `${slug}-${Date.now().toString().slice(-4)}`,
         difficulty: difficulty || 'EASY',
         topicId: topic.id,
-        description: description || 'Problem description.',
-        constraints: constraints || '1 <= N <= 10^5',
+        description: description || (external ? 'External problem — see the source link. No statement stored.' : 'Problem description.'),
+        constraints: constraints || (external ? 'See source' : '1 <= N <= 10^5'),
         timeLimitMs: Number(timeLimitMs) || 2000,
         memoryLimitMb: Number(memoryLimitMb) || 256,
+
+        // Library metadata
+        subtopics: Array.isArray(subtopics) ? subtopics.filter(Boolean).map(String) : [],
+        frequencyBand: normalizeEnum(frequencyBand, ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH']),
+        frequencyScore: frequencyScore != null ? Number(frequencyScore) : null,
+        estimatedTimeMin: estimatedTimeMin != null ? Number(estimatedTimeMin) : null,
+        sourcePlatform: normalizeEnum(sourcePlatform, SOURCE_PLATFORMS) || 'CUSTOM',
+        sourceUrl: sourceUrl || null,
+        originalAuthor: originalAuthor || null,
+        authorNotes: authorNotes || null,
+        contentStatus: normalizeEnum(contentStatus, ['DRAFT', 'IN_REVIEW', 'PUBLISHED', 'ARCHIVED']) || 'PUBLISHED',
+        acceptanceRate: acceptanceRate != null ? Number(acceptanceRate) : null,
+        isExternalOnly: external,
+        ...(companyTagCreates.length ? { companyTags: { create: companyTagCreates } } : {}),
 
         starterCodes: {
           create: Array.isArray(starterCodes) ? starterCodes : [
@@ -162,7 +312,8 @@ async function createQuestion(req, res) {
         starterCodes: true,
         testCases: true,
         hints: true,
-        editorial: true
+        editorial: true,
+        companyTags: { include: { companyTag: true } }
       }
     });
 
@@ -174,16 +325,37 @@ async function createQuestion(req, res) {
 
 async function updateQuestion(req, res) {
   try {
-    const { title, difficulty, description, constraints } = req.body;
+    const b = req.body;
+    const data = {
+      ...(b.title && { title: b.title }),
+      ...(b.difficulty && { difficulty: b.difficulty }),
+      ...(b.description !== undefined && { description: b.description }),
+      ...(b.constraints !== undefined && { constraints: b.constraints }),
+      // Library metadata (all optional)
+      ...(Array.isArray(b.subtopics) && { subtopics: b.subtopics.filter(Boolean).map(String) }),
+      ...(b.frequencyBand !== undefined && { frequencyBand: normalizeEnum(b.frequencyBand, ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH']) }),
+      ...(b.frequencyScore !== undefined && { frequencyScore: b.frequencyScore != null ? Number(b.frequencyScore) : null }),
+      ...(b.estimatedTimeMin !== undefined && { estimatedTimeMin: b.estimatedTimeMin != null ? Number(b.estimatedTimeMin) : null }),
+      ...(b.sourcePlatform !== undefined && { sourcePlatform: normalizeEnum(b.sourcePlatform, SOURCE_PLATFORMS) || 'CUSTOM' }),
+      ...(b.sourceUrl !== undefined && { sourceUrl: b.sourceUrl || null }),
+      ...(b.originalAuthor !== undefined && { originalAuthor: b.originalAuthor || null }),
+      ...(b.authorNotes !== undefined && { authorNotes: b.authorNotes || null }),
+      ...(b.contentStatus !== undefined && { contentStatus: normalizeEnum(b.contentStatus, ['DRAFT', 'IN_REVIEW', 'PUBLISHED', 'ARCHIVED']) || 'PUBLISHED' }),
+      ...(b.acceptanceRate !== undefined && { acceptanceRate: b.acceptanceRate != null ? Number(b.acceptanceRate) : null }),
+      ...(b.isExternalOnly !== undefined && { isExternalOnly: !!b.isExternalOnly })
+    };
+
+    // Company tags: when provided, replace the full set.
+    if (Array.isArray(b.companyTags)) {
+      const creates = await resolveCompanyTags(b.companyTags);
+      await prisma.companyTagMap.deleteMany({ where: { questionId: req.params.id } });
+      data.companyTags = { create: creates };
+    }
+
     const question = await prisma.question.update({
       where: { id: req.params.id },
-      data: {
-        ...(title && { title }),
-        ...(difficulty && { difficulty }),
-        ...(description && { description }),
-        ...(constraints && { constraints })
-      },
-      include: { topic: true, starterCodes: true, testCases: true }
+      data,
+      include: { topic: true, starterCodes: true, testCases: true, companyTags: { include: { companyTag: true } } }
     });
 
     res.json({ success: true, data: question });
