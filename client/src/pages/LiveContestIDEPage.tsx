@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { ArrowLeft, Trophy, Clock, FileText, Terminal, Award } from 'lucide-react';
 import { Badge, Spinner, EmptyState, Tabs } from '../shared/components/ui';
+import { ProblemStatement } from '../shared/components/ProblemStatement';
 import { cn } from '../shared/lib/cn';
 
 // Format a millisecond countdown as H:MM:SS (or MM:SS under an hour).
@@ -215,23 +216,7 @@ export const LiveContestIDEPage: React.FC = () => {
               ) : !activeContestQuestion ? (
                 <EmptyState icon={<FileText />} title="No problem selected" description="Select a question from the navigator above." />
               ) : (
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-bold tracking-tight text-on-surface">{activeContestQuestion.title}</h2>
-                    <Badge variant="primary">{activeContestQuestion.topic?.name || 'Algorithms'}</Badge>
-                  </div>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
-                    {activeContestQuestion.description}
-                  </div>
-                  {activeContestQuestion.constraints && (
-                    <div className="space-y-1.5 rounded-xl border border-outline-variant bg-surface-container-low p-3">
-                      <h4 className="text-xs font-semibold text-on-surface">Constraints</h4>
-                      <pre className="whitespace-pre-wrap font-mono text-[11px] text-on-surface-variant">
-                        {activeContestQuestion.constraints}
-                      </pre>
-                    </div>
-                  )}
-                </div>
+                <ProblemStatement question={activeContestQuestion} showHints />
               )
             ) : (
               <ContestLeaderboard participants={leaderboard} />
@@ -243,7 +228,7 @@ export const LiveContestIDEPage: React.FC = () => {
         <div className="min-h-[360px] flex-1 lg:h-full">
           <MonacoCodeEditor
             questionId={activeContestQuestion?.id}
-            roomCode={`CONTEST-${id}`}
+            starterCodes={activeContestQuestion?.starterCodes}
             contestId={id}
             disabledReason={editorDisabledReason}
             onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['contest-leaderboard', id] })}

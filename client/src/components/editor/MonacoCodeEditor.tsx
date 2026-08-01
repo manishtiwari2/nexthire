@@ -1,14 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import Editor from '@monaco-editor/react';
+import React, { useEffect, useRef, useState } from 'react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import { useEditorStore, SupportedLanguage, JudgePhase } from '../../store/useEditorStore';
-import { Play, RotateCcw, CheckCircle, AlertCircle, Clock, Cpu, Send, Loader2 } from 'lucide-react';
+import {
+  Play, RotateCcw, CheckCircle, AlertCircle, Clock, Cpu, Send, Loader2,
+  Minus, Plus, WrapText, Maximize2, Minimize2, Check,
+} from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { io, Socket } from 'socket.io-client';
 import { awaitVerdict } from '../../api/judgeClient';
 import { useNotificationStore } from '../../store/useNotificationStore';
 import { Button } from '../../shared/components/ui';
 import { cn } from '../../shared/lib/cn';
-import { resolveStarter, StarterCode } from '../../shared/lib/starterTemplates';
+import { StarterCode } from '../../shared/lib/starterTemplates';
+import { useEditorSession } from '../../shared/hooks/useEditorSession';
 
 interface MonacoCodeEditorProps {
   questionId?: string;
@@ -41,15 +45,28 @@ const toolbarSelect =
   'outline-none transition-colors hover:border-outline focus:border-primary focus:ring-2 focus:ring-primary/25 ' +
   'cursor-pointer [&>option]:bg-surface-container';
 
-export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, roomCode, contestId, onSubmitted, starterCodes, disabledReason }) => {
+const iconBtn =
+  'flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container text-on-surface-variant ' +
+  'transition-colors hover:border-outline hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40';
+
+export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
+  questionId, roomCode, contestId, onSubmitted, starterCodes, disabledReason,
+}) => {
   const {
     language, theme, fontSize, code, isExecuting, phase, result,
-    setLanguage, setTheme, setCode, setIsExecuting, setPhase, setResult,
+    setLanguage, setTheme, setFontSize, setCode, setIsExecuting, setPhase, setResult,
   } = useEditorStore();
   const socketRef = useRef<Socket | null>(null);
   const { addToast } = useNotificationStore();
   const locked = Boolean(disabledReason);
   const busy = isExecuting;
+
+  const [wordWrap, setWordWrap] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Per-(question, language) draft load + autosave + result reset. Fixes the contest IDE,
+  // which previously shared one global buffer across every problem.
+  const { saveState, resetToStarter } = useEditorSession(questionId, starterCodes);
 
   // Live collaboration socket (only when inside a room). Authenticated so the server accepts it.
   useEffect(() => {
@@ -79,8 +96,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
     }
   };
 
-  // Shared run/submit flow. The verdict comes entirely from the real judge — via Socket.IO
-  // events when available, falling back to polling — never fabricated on the client.
+  // Shared run/submit flow. Reads the freshest code/language from the store (not a stale
+  // closure) so keyboard-shortcut invocations always judge what's on screen. The verdict comes
+  // entirely from the real judge — via Socket.IO events with a polling fallback — never faked.
   const runJudge = async (endpoint: string) => {
     if (locked) {
       addToast('Submissions Closed', disabledReason || 'This session is no longer accepting code.', 'warning');
@@ -90,11 +108,13 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
       addToast('No Question Selected', 'Open a coding question to run against its test cases.', 'warning');
       return;
     }
+    if (useEditorStore.getState().isExecuting) return; // guard against double-fire
+    const { code: freshCode, language: freshLang } = useEditorStore.getState();
     setIsExecuting(true);
     setResult(null);
     setPhase('QUEUED');
     try {
-      const res: any = await apiClient.post(endpoint, { questionId, code, language });
+      const res: any = await apiClient.post(endpoint, { questionId, code: freshCode, language: freshLang });
       const submissionId = res.data.submissionId;
       const verdict = await awaitVerdict(submissionId, (p) => setPhase(p));
       setResult(verdict);
@@ -111,16 +131,36 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
   };
 
   const handleRunCode = () => runJudge(`/questions/${questionId}/execute`);
-
   const handleSubmitCode = async () => {
     await runJudge(contestId ? `/contests/${contestId}/submit` : `/questions/${questionId}/execute`);
     if (onSubmitted) onSubmitted();
   };
 
+  // Keep the latest handlers in refs so Monaco commands (bound once on mount) never go stale.
+  const runRef = useRef(handleRunCode);
+  const submitRef = useRef(handleSubmitCode);
+  runRef.current = handleRunCode;
+  submitRef.current = handleSubmitCode;
+
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    // Ctrl/Cmd+Enter → Run,  Ctrl/Cmd+Shift+Enter → Submit (matches LeetCode).
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runRef.current());
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
+      () => submitRef.current()
+    );
+  };
+
   const accepted = result?.status === 'ACCEPTED';
+  const bumpFont = (delta: number) => setFontSize(Math.max(10, Math.min(24, fontSize + delta)));
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-2">
+    <div
+      className={cn(
+        'flex flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-2',
+        fullscreen ? 'fixed inset-2 z-50 h-auto' : 'h-full'
+      )}
+    >
       {/* Editor top bar */}
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-outline-variant bg-surface-container-low px-3">
         <div className="flex items-center gap-2">
@@ -138,37 +178,72 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             value={theme}
             onChange={(e) => setTheme(e.target.value as any)}
             aria-label="Editor theme"
-            className={cn(toolbarSelect, 'hidden sm:block')}
+            className={cn(toolbarSelect, 'hidden lg:block')}
           >
             <option value="vs-dark">VS Dark</option>
             <option value="light">VS Light</option>
           </select>
+
+          {/* Font size stepper */}
+          <div className="hidden items-center rounded-lg border border-outline-variant bg-surface-container sm:flex">
+            <button className={cn(iconBtn, 'h-8 w-7 rounded-r-none border-0')} onClick={() => bumpFont(-1)} title="Decrease font size" aria-label="Decrease font size">
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-6 text-center font-mono text-[11px] text-on-surface-variant tabular-nums">{fontSize}</span>
+            <button className={cn(iconBtn, 'h-8 w-7 rounded-l-none border-0')} onClick={() => bumpFont(1)} title="Increase font size" aria-label="Increase font size">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Word wrap */}
+          <button
+            className={cn(iconBtn, 'hidden sm:flex', wordWrap && 'border-primary/40 bg-primary/12 text-primary')}
+            onClick={() => setWordWrap((w) => !w)}
+            title={wordWrap ? 'Word wrap: on' : 'Word wrap: off'}
+            aria-label="Toggle word wrap"
+            aria-pressed={wordWrap}
+          >
+            <WrapText className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Autosave indicator */}
+          <span
+            className={cn(
+              'mr-0.5 hidden items-center gap-1 text-[11px] font-medium md:flex',
+              saveState === 'saved' ? 'text-on-surface-muted' : 'text-warning'
+            )}
+            title="Your draft is saved locally per question & language"
+          >
+            {saveState === 'saved' ? <Check className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {saveState === 'saved' ? 'Saved' : 'Saving…'}
+          </span>
+
           {busy && phase !== 'DONE' && (
             <span className="mr-1 hidden items-center gap-1.5 text-[11px] font-semibold text-warning sm:flex">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> {PHASE_LABEL[phase] || 'Working…'}
             </span>
           )}
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setCode(resolveStarter(starterCodes, language))}
-            title="Reset to starter code"
-            aria-label="Reset to starter code"
-          >
+          <button className={cn(iconBtn)} onClick={resetToStarter} title="Reset to starter code" aria-label="Reset to starter code">
             <RotateCcw className="h-4 w-4" />
-          </Button>
+          </button>
+          <button
+            className={cn(iconBtn, 'hidden sm:flex')}
+            onClick={() => setFullscreen((f) => !f)}
+            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
+            aria-label="Toggle fullscreen editor"
+          >
+            {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
 
           <Button
             variant="secondary"
             size="sm"
             onClick={handleRunCode}
             disabled={busy || locked}
-            title={locked ? disabledReason : undefined}
+            title={locked ? disabledReason : 'Run sample tests (Ctrl+Enter)'}
             leftIcon={<Play className="h-3.5 w-3.5 fill-current text-primary" />}
           >
             {busy ? 'Judging…' : 'Run'}
@@ -178,7 +253,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             size="sm"
             onClick={handleSubmitCode}
             disabled={busy || locked}
-            title={locked ? disabledReason : undefined}
+            title={locked ? disabledReason : 'Submit against all tests (Ctrl+Shift+Enter)'}
             leftIcon={<Send className="h-3.5 w-3.5" />}
           >
             {busy ? 'Judging…' : 'Submit'}
@@ -201,6 +276,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
           theme={theme}
           value={code}
           onChange={handleCodeChange}
+          onMount={handleEditorMount}
           options={{
             fontSize: fontSize,
             minimap: { enabled: false },
@@ -209,6 +285,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
             padding: { top: 14, bottom: 14 },
             smoothScrolling: true,
             cursorBlinking: 'smooth',
+            renderLineHighlight: 'all',
+            wordWrap: wordWrap ? 'on' : 'off',
+            tabSize: 4,
             fontFamily: 'JetBrains Mono, monospace',
             fontLigatures: true,
           }}
@@ -225,7 +304,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
 
       {/* Output console */}
       {result && (
-        <div className="max-h-60 shrink-0 space-y-2 overflow-y-auto border-t border-outline-variant bg-surface-container p-4 font-mono text-xs">
+        <div className="max-h-64 shrink-0 space-y-2 overflow-y-auto border-t border-outline-variant bg-surface-container p-4 font-mono text-xs">
           <div className="flex items-center justify-between gap-2 border-b border-outline-variant pb-2">
             {accepted ? (
               <span className="flex items-center gap-1.5 font-bold text-success">
@@ -238,7 +317,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
               </span>
             ) : (
               <span className="flex items-center gap-1.5 font-bold text-danger">
-                <AlertCircle className="h-4 w-4" /> {result.status}
+                <AlertCircle className="h-4 w-4" /> {(result.status || '').replace(/_/g, ' ')}
                 {typeof result.passCount === 'number' && typeof result.totalTestCases === 'number' && result.totalTestCases > 0 && (
                   <span className="font-normal text-on-surface-variant">
                     ({result.passCount}/{result.totalTestCases} passed)
@@ -276,7 +355,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
           )}
 
           {/* Program stdout */}
-          {result.output && result.status !== 'COMPILATION_ERROR' && (
+          {result.output && result.status !== 'COMPILATION_ERROR' && result.output !== 'Execution complete.' && (
             <div>
               <p className="mb-1 text-[10px] uppercase tracking-wide text-on-surface-muted">Output</p>
               <pre className="whitespace-pre-wrap leading-relaxed text-on-surface-variant">{result.output}</pre>
@@ -285,19 +364,33 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ questionId, 
 
           {/* Sample test breakdown (hidden cases are never returned by the API) */}
           {Array.isArray(result.testResults) && result.testResults.length > 0 && (
-            <div className="space-y-1 border-t border-outline-variant pt-2">
+            <div className="space-y-2 border-t border-outline-variant pt-2">
               <p className="text-[10px] uppercase tracking-wide text-on-surface-muted">Sample Test Cases</p>
-              {result.testResults.map((t) => (
-                <div key={t.index} className="flex items-center gap-2 text-[11px]">
-                  {t.verdict === 'ACCEPTED' ? (
-                    <CheckCircle className="h-3 w-3 text-success" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 text-danger" />
-                  )}
-                  <span className="text-on-surface-muted">Case #{t.index + 1}</span>
-                  <span className={t.verdict === 'ACCEPTED' ? 'text-success' : 'text-danger'}>{t.verdict}</span>
-                </div>
-              ))}
+              {result.testResults.map((t) => {
+                const ok = t.verdict === 'ACCEPTED';
+                return (
+                  <div key={t.index} className="rounded-lg border border-outline-variant bg-surface-container-low p-2">
+                    <div className="flex items-center gap-2 text-[11px]">
+                      {ok ? <CheckCircle className="h-3 w-3 text-success" /> : <AlertCircle className="h-3 w-3 text-danger" />}
+                      <span className="text-on-surface-muted">Case #{t.index + 1}</span>
+                      <span className={ok ? 'text-success' : 'text-danger'}>{(t.verdict || '').replace(/_/g, ' ')}</span>
+                    </div>
+                    {/* On a failed sample, show expected vs got so the user can debug immediately. */}
+                    {!ok && (t.expectedOutput || t.stdout) && (
+                      <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
+                        <div>
+                          <span className="mb-0.5 block text-[9px] uppercase tracking-wide text-on-surface-muted">Expected</span>
+                          <pre className="whitespace-pre-wrap break-words rounded bg-surface-container-lowest p-1.5 text-[11px] text-success">{t.expectedOutput || '—'}</pre>
+                        </div>
+                        <div>
+                          <span className="mb-0.5 block text-[9px] uppercase tracking-wide text-on-surface-muted">Your Output</span>
+                          <pre className="whitespace-pre-wrap break-words rounded bg-surface-container-lowest p-1.5 text-[11px] text-danger">{t.stdout || '—'}</pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

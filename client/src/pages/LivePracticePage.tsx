@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -7,16 +7,17 @@ import { SubmissionHistoryPanel } from '../features/question-bank/components/Sub
 import { RevisionScheduleCard } from '../features/revision/components/RevisionScheduleCard';
 import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw } from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore';
-import { resolveStarter } from '../shared/lib/starterTemplates';
-import { Badge, DifficultyBadge, Spinner, EmptyState, Alert, Tabs } from '../shared/components/ui';
+import { Spinner, EmptyState, Alert, Tabs } from '../shared/components/ui';
+import { DifficultyBadge } from '../shared/components/ui';
+import { ProblemStatement } from '../shared/components/ProblemStatement';
+import { MarkdownContent } from '../shared/components/MarkdownContent';
 
 type PracticeTab = 'description' | 'hints' | 'editorial' | 'history' | 'revision';
 
 export const LivePracticePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<PracticeTab>('description');
-  const [autosaveStatus, setAutosaveStatus] = useState('Saved');
-  const { code, setCode, language } = useEditorStore();
+  const { setCode } = useEditorStore();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -35,25 +36,8 @@ export const LivePracticePage: React.FC = () => {
   const question = data?.data;
   const submissions = submissionsData?.data || [];
 
-  // Autosave code draft to LocalStorage with 1000ms debounce
-  useEffect(() => {
-    if (!id || !code) return;
-    setAutosaveStatus('Saving...');
-    const timer = setTimeout(() => {
-      localStorage.setItem(`nexthire_draft_${id}_${language}`, code);
-      setAutosaveStatus('Saved');
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [code, id, language]);
-
-  // Load the right code when the question loads or the language changes: a previously saved
-  // draft for THIS language wins; otherwise fall back to the question's starter template (or a
-  // sensible default skeleton) so the editor is never empty.
-  useEffect(() => {
-    if (!id || !question) return;
-    const savedDraft = localStorage.getItem(`nexthire_draft_${id}_${language}`);
-    setCode(savedDraft || resolveStarter(question.starterCodes, language));
-  }, [question, id, language, setCode]);
+  // Draft load / autosave / starter code are owned by the editor (useEditorSession), so a
+  // question's code, verdict, and per-language drafts stay correctly isolated everywhere.
 
   const tabItems = [
     { value: 'description' as const, label: 'Description', icon: <FileText /> },
@@ -86,10 +70,7 @@ export const LivePracticePage: React.FC = () => {
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5 text-xs text-on-surface-muted">
-          <Badge variant={autosaveStatus === 'Saved' ? 'success' : 'default'} className="hidden sm:inline-flex">
-            {autosaveStatus}
-          </Badge>
-          <span className="hidden items-center gap-1 font-mono md:flex">
+          <span className="hidden items-center gap-1 font-mono md:flex" title="Time limit per test case">
             <Clock className="h-3.5 w-3.5 text-primary" /> {question?.timeLimitMs || 2000}ms
           </span>
         </div>
@@ -111,36 +92,7 @@ export const LivePracticePage: React.FC = () => {
             ) : !question ? (
               <EmptyState icon={<Code2 />} title="Question not found" description="This problem may have been removed." />
             ) : activeTab === 'description' ? (
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <h2 className="text-lg font-bold tracking-tight text-on-surface">{question.title}</h2>
-                  <Badge variant="primary">{question.topic?.name || 'Algorithms'}</Badge>
-                </div>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
-                  {question.description}
-                </div>
-                {question.constraints && (
-                  <div className="space-y-1.5 rounded-xl border border-outline-variant bg-surface-container-low p-3">
-                    <h4 className="text-xs font-semibold text-on-surface">Constraints</h4>
-                    <pre className="whitespace-pre-wrap font-mono text-[11px] text-on-surface-variant">{question.constraints}</pre>
-                  </div>
-                )}
-                {question.testCases && question.testCases.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold text-on-surface">Sample Cases</h4>
-                    {question.testCases.map((tc: any, i: number) => (
-                      <div key={tc.id || i} className="space-y-1 rounded-xl border border-outline-variant bg-surface-container-low p-3 font-mono text-xs">
-                        <p className="font-semibold text-on-surface">Example {i + 1}</p>
-                        <p className="text-on-surface-variant"><span className="text-on-surface-muted">Input:</span> {tc.input}</p>
-                        <p className="text-on-surface-variant"><span className="text-on-surface-muted">Expected:</span> {tc.expectedOutput}</p>
-                        {tc.explanation && (
-                          <p className="mt-1 font-sans text-[11px] italic text-on-surface-muted">{tc.explanation}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ProblemStatement question={question} />
             ) : activeTab === 'hints' ? (
               <div className="space-y-3">
                 {question.hints && question.hints.length > 0 ? (
@@ -155,9 +107,9 @@ export const LivePracticePage: React.FC = () => {
               </div>
             ) : activeTab === 'editorial' ? (
               question.editorial ? (
-                <div className="space-y-3 text-sm leading-relaxed text-on-surface-variant">
+                <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-on-surface">Official Editorial</h3>
-                  <p className="whitespace-pre-wrap">{question.editorial.content}</p>
+                  <MarkdownContent content={question.editorial.content} />
                   {question.editorial.solution && (
                     <pre className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-3 font-mono text-[11px] text-on-surface">
                       {question.editorial.solution}
