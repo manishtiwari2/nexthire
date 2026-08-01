@@ -9,10 +9,14 @@ const authRoutes = require('./features/auth/authRoutes');
 const questionRoutes = require('./features/question-bank/questionRoutes');
 const contestRoutes = require('./features/contest/contestRoutes');
 const submissionRoutes = require('./features/submission/submissionRoutes');
+const libraryRoutes = require('./features/library/libraryRoutes');
+const revisionRoutes = require('./features/revision/revisionRoutes');
 const { serveDocs } = require('./shared/docs/swagger');
 const { initSockets } = require('./socket/socketHandler');
 const { initJudgeEventRelay } = require('./features/judge/judgeEvents');
 const { reconcilePendingSubmissions } = require('./features/judge/reconcile');
+const { isInlineMode, setJudgeIo } = require('./features/judge/judgeDispatch');
+const { updateContestStatuses } = require('./features/contest/contestController');
 const { prisma } = require('./shared/db');
 
 const app = express();
@@ -33,16 +37,32 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // WebSockets
 initSockets(io);
 
-// Relay judge verdicts published by the (separate) worker process to the submitter's room.
-// Non-fatal if Redis is unavailable — the frontend falls back to polling.
-try {
-  initJudgeEventRelay(io);
-} catch (err) {
-  console.error('[judge] event relay init failed:', err.message);
+if (isInlineMode()) {
+  // Inline judge (JUDGE_INLINE=1): submissions are evaluated in this process, so there is no
+  // separate worker and no Redis relay. Emit lifecycle events straight to Socket.IO instead.
+  setJudgeIo(io);
+  console.log('🧑‍⚖️  [judge] inline mode — submissions evaluated in-process (no Redis/worker).');
+} else {
+  // Relay judge verdicts published by the (separate) worker process to the submitter's room.
+  // Non-fatal if Redis is unavailable — the frontend falls back to polling.
+  try {
+    initJudgeEventRelay(io);
+  } catch (err) {
+    console.error('[judge] event relay init failed:', err.message);
+  }
 }
 
 // Safety net: re-enqueue any submissions left PENDING (e.g. enqueued just before a crash).
 reconcilePendingSubmissions().catch((err) => console.error('[judge] reconcile failed:', err.message));
+
+// Contest lifecycle: flip UPCOMING→LIVE→ENDED on schedule so a contest ends automatically
+// when its timer expires, even if nobody is reading it. Reads still reconcile lazily too.
+const CONTEST_SWEEP_MS = Number(process.env.CONTEST_SWEEP_MS) || 30000;
+updateContestStatuses().catch((err) => console.error('[contest] status sweep failed:', err.message));
+const contestSweep = setInterval(() => {
+  updateContestStatuses().catch((err) => console.error('[contest] status sweep failed:', err.message));
+}, CONTEST_SWEEP_MS);
+if (contestSweep.unref) contestSweep.unref();
 
 // Health Check & OpenAPI Docs
 app.get('/api/health', (req, res) => {
@@ -57,15 +77,20 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/questions', questionRoutes);
 app.use('/api/v1/contests', contestRoutes);
 app.use('/api/v1/submissions', submissionRoutes);
+app.use('/api/v1/library', libraryRoutes);
+app.use('/api/v1/revision', revisionRoutes);
 
 // Backward-compatible aliases
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/contests', contestRoutes);
 app.use('/api/submissions', submissionRoutes);
+app.use('/api/library', libraryRoutes);
+app.use('/api/revision', revisionRoutes);
 
 // Global Error Handler
-app.use((err, req, res, next) => {
+// eslint-disable-next-line no-unused-vars -- Express identifies error middleware by its 4-arg signature.
+app.use((err, req, res, _next) => {
   console.error('[Express Error]', err);
   res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
 });

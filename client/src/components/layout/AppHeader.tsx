@@ -1,76 +1,89 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Bell, Search, LogOut, User as UserIcon, Shield, Settings, Sparkles } from 'lucide-react';
+import { Menu, LogOut, ShieldCheck, Sparkles, ChevronDown } from 'lucide-react';
+import { Badge } from '../../shared/components/ui';
+import { cn } from '../../shared/lib/cn';
 
-export const AppHeader: React.FC = () => {
+export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> = ({ onMenuClick, title }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const isAdmin = user?.role === 'ADMIN';
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const avatar = user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(user?.email || 'user')}`;
+
   return (
-    <header className="fixed top-0 right-0 left-[260px] h-16 bg-surface/80 backdrop-blur-md border-b border-outline-variant z-40 flex items-center justify-between px-8 shadow-sm">
-      <div className="flex items-center gap-4 flex-1 max-w-md">
-        <div className="relative w-full focus-within:ring-2 focus-within:ring-primary/20 rounded-lg">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-          <input
-            className="w-full bg-surface-container-low border-none rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary outline-none"
-            placeholder="Search problems, contests, candidates..."
-            type="text"
-          />
-        </div>
+    <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-outline-variant px-4 sm:px-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          aria-label="Open menu"
+          className="rounded-lg p-2 text-on-surface-variant hover:bg-surface-container-high lg:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        {title && <h2 className="text-sm font-semibold text-on-surface">{title}</h2>}
       </div>
 
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3">
-          <Link to="/notifications" aria-label="Notifications" className="relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-lg hover:bg-surface-container-low">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full" />
-          </Link>
-          <Link to="/settings/editor" aria-label="Settings" className="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-lg hover:bg-surface-container-low">
-            <Settings className="w-5 h-5" />
-          </Link>
-        </div>
+      <div className="relative" ref={menuRef}>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="flex items-center gap-2.5 rounded-xl border border-transparent py-1.5 pl-1.5 pr-2.5 transition-colors hover:border-outline-variant hover:bg-surface-container-high"
+        >
+          <img src={avatar} alt="" className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container object-cover" />
+          <span className="hidden text-left sm:block">
+            <span className="block text-xs font-semibold leading-tight text-on-surface">{user?.name || user?.email || 'User'}</span>
+            <span className="block text-[10px] leading-tight text-on-surface-muted">{isAdmin ? 'Administrator' : 'Candidate'}</span>
+          </span>
+          <ChevronDown className={cn('h-4 w-4 text-on-surface-muted transition-transform', open && 'rotate-180')} />
+        </button>
 
-        <div className="h-6 w-[1px] bg-outline-variant" />
-
-        {/* User Dropdown */}
-        <div className="flex items-center gap-3">
-          <Link to="/profile" className="flex items-center gap-3 group">
-            <div className="text-right">
-              <p className="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">{user?.name || user?.email || 'User'}</p>
-              <div className="flex items-center justify-end gap-1">
-                {user?.role === 'ADMIN' ? (
-                  <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                    <Shield className="w-3 h-3" /> ADMIN
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                    <Sparkles className="w-3 h-3" /> CANDIDATE
-                  </span>
-                )}
+        {open && (
+          <div
+            role="menu"
+            className="animate-scale-in absolute right-0 mt-2 w-60 origin-top-right overflow-hidden rounded-xl border border-outline-variant bg-surface-container shadow-elev-3"
+          >
+            <div className="flex items-center gap-3 border-b border-outline-variant p-3">
+              <img src={avatar} alt="" className="h-10 w-10 rounded-lg border border-outline-variant object-cover" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-on-surface">{user?.name || 'User'}</p>
+                <p className="truncate text-xs text-on-surface-muted">{user?.email}</p>
               </div>
             </div>
-            <img
-              className="w-9 h-9 rounded-full border-2 border-primary-container object-cover"
-              src={user?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.email || 'user')}`}
-              alt={user?.name || 'User'}
-            />
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            title="Logout"
-            aria-label="Logout"
-            className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-lg hover:bg-red-50 ml-2"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+            <div className="p-2">
+              <Badge variant={isAdmin ? 'accent' : 'primary'} className="w-full justify-center">
+                {isAdmin ? <ShieldCheck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                {isAdmin ? 'Admin Access' : 'Candidate'}
+              </Badge>
+            </div>
+            <div className="border-t border-outline-variant p-1.5">
+              <button
+                onClick={handleLogout}
+                role="menuitem"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-error-container hover:text-danger"
+              >
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

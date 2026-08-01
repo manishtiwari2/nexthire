@@ -1,214 +1,251 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { MonacoCodeEditor } from '../components/editor/MonacoCodeEditor';
 import { SubmissionHistoryPanel } from '../features/question-bank/components/SubmissionHistoryPanel';
 import { RevisionScheduleCard } from '../features/revision/components/RevisionScheduleCard';
-import { ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw } from 'lucide-react';
+import {
+  ArrowLeft, Code2, Clock, Lightbulb, BookOpen, FileText, History, RotateCcw, NotebookPen,
+  Target, ExternalLink, MessagesSquare, GripVertical, Gauge, Timer,
+} from 'lucide-react';
 import { useEditorStore } from '../store/useEditorStore';
+import { Spinner, EmptyState, Alert, Tabs, Button } from '../shared/components/ui';
+import { DifficultyBadge } from '../shared/components/ui';
+import { ProblemStatement } from '../shared/components/ProblemStatement';
+import { MarkdownContent } from '../shared/components/MarkdownContent';
+import { NotesPanel } from '../features/library/components/NotesPanel';
+import { ProgressStatusControl } from '../features/library/components/ProgressStatusControl';
+import { BookmarkButton } from '../features/library/components/BookmarkButton';
+import { SourceBadge, SOURCE_LABELS } from '../features/library/components/MetadataBadges';
+import { useAuthStore } from '../store/useAuthStore';
+
+const SourceLabel = (platform?: keyof typeof SOURCE_LABELS) => (platform && SOURCE_LABELS[platform]) || 'the source platform';
+
+type PracticeTab = 'description' | 'editorial' | 'discussion' | 'hints' | 'notes' | 'progress' | 'history' | 'revision';
+
+const SPLIT_KEY = 'nh_problem_split';
+const clampPct = (n: number) => Math.max(28, Math.min(68, n));
+
+/** True when the viewport is at the `lg` breakpoint (where the split view is horizontal). */
+function useIsDesktop() {
+  const [isLg, setIsLg] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true
+  );
+  useEffect(() => {
+    const m = window.matchMedia('(min-width: 1024px)');
+    const handler = () => setIsLg(m.matches);
+    m.addEventListener('change', handler);
+    return () => m.removeEventListener('change', handler);
+  }, []);
+  return isLg;
+}
 
 export const LivePracticePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<'description' | 'hints' | 'editorial' | 'history' | 'revision'>('description');
-  const [autosaveStatus, setAutosaveStatus] = useState('Saved');
-  const { code, setCode, language } = useEditorStore();
+  const [activeTab, setActiveTab] = useState<PracticeTab>('description');
+  const { setCode } = useEditorStore();
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const isDesktop = useIsDesktop();
+
+  // Resizable split (persisted). Only meaningful on desktop; mobile stacks vertically.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const [leftPct, setLeftPct] = useState(() => clampPct(parseFloat(localStorage.getItem(SPLIT_KEY) || '44')));
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      setLeftPct(clampPct(((e.clientX - rect.left) / rect.width) * 100));
+    };
+    const onUp = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+  useEffect(() => { localStorage.setItem(SPLIT_KEY, String(Math.round(leftPct))); }, [leftPct]);
+
+  const startDrag = () => {
+    draggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['question', id],
     queryFn: () => apiClient.get(`/questions/${id}`),
-    enabled: !!id
+    enabled: !!id,
   });
 
-  // Fetch past submission history for candidate
   const { data: submissionsData, isLoading: isSubmissionsLoading } = useQuery({
     queryKey: ['submissions', id],
     queryFn: () => apiClient.get(`/questions/${id}/submissions`),
-    enabled: !!id
+    enabled: !!id,
   });
 
   const question = data?.data;
   const submissions = submissionsData?.data || [];
+  const isExternal = !!question?.isExternalOnly;
 
-  // Autosave code draft to LocalStorage with 1000ms debounce
-  useEffect(() => {
-    if (!id || !code) return;
-    setAutosaveStatus('Saving...');
-    const timer = setTimeout(() => {
-      localStorage.setItem(`nexthire_draft_${id}_${language}`, code);
-      setAutosaveStatus('Saved');
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [code, id, language]);
-
-  // Restore saved draft on mount
-  useEffect(() => {
-    if (!id || !question) return;
-    const savedDraft = localStorage.getItem(`nexthire_draft_${id}_${language}`);
-    if (savedDraft) {
-      setCode(savedDraft);
-    } else if (question.starterCodes) {
-      const match = question.starterCodes.find((sc: any) => sc.language?.toLowerCase() === language.toLowerCase());
-      if (match && match.template) {
-        setCode(match.template);
-      }
-    }
-  }, [question, id, language]);
+  const tabItems = [
+    { value: 'description' as const, label: 'Description', icon: <FileText /> },
+    { value: 'editorial' as const, label: 'Editorial', icon: <BookOpen /> },
+    { value: 'discussion' as const, label: 'Discussion', icon: <MessagesSquare /> },
+    { value: 'hints' as const, label: 'Hints', icon: <Lightbulb />, count: question?.hints?.length || 0 },
+    { value: 'notes' as const, label: 'Notes', icon: <NotebookPen /> },
+    { value: 'progress' as const, label: 'Progress', icon: <Target /> },
+    { value: 'history' as const, label: 'History', icon: <History />, count: submissions.length || 0 },
+    { value: 'revision' as const, label: 'SM-2', icon: <RotateCcw /> },
+  ];
 
   return (
-    <div className="h-screen flex flex-col bg-surface overflow-hidden">
-      {/* Top Header */}
-      <header className="h-14 bg-white border-b border-outline-variant px-6 flex items-center justify-between shadow-sm z-10">
-        <div className="flex items-center gap-4">
-          <Link to="/questions" className="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-lg hover:bg-slate-100">
-            <ArrowLeft className="w-4 h-4" />
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      {/* Top header */}
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-lowest px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            to="/questions"
+            aria-label="Back to question bank"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Back</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <Code2 className="w-5 h-5 text-primary" />
-            <h1 className="font-bold text-sm text-on-surface">{question?.title || 'Practice Problem'}</h1>
-          </div>
-          {question && (
-            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-              question.difficulty === 'EASY' ? 'bg-emerald-100 text-emerald-800' :
-              question.difficulty === 'MEDIUM' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-            }`}>
-              {question.difficulty}
+          <div className="hidden h-4 w-px bg-outline-variant sm:block" />
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
+              <Code2 className="h-4 w-4" />
             </span>
-          )}
+            <h1 className="truncate text-sm font-semibold text-on-surface">{question?.title || 'Practice Problem'}</h1>
+          </div>
+          {question && <DifficultyBadge difficulty={question.difficulty} />}
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-slate-500 font-mono">
-          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">
-            Autosave: {autosaveStatus}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-primary" /> Limit: {question?.timeLimitMs || 2000}ms
+        <div className="flex shrink-0 items-center gap-3 text-xs text-on-surface-muted">
+          {typeof question?.acceptanceRate === 'number' && (
+            <span className="hidden items-center gap-1 lg:flex" title="Acceptance rate">
+              <Gauge className="h-3.5 w-3.5 text-success" /> {Math.round(question.acceptanceRate)}%
+            </span>
+          )}
+          {question?.estimatedTimeMin && (
+            <span className="hidden items-center gap-1 md:flex" title="Estimated solve time">
+              <Timer className="h-3.5 w-3.5 text-tertiary" /> ~{question.estimatedTimeMin}m
+            </span>
+          )}
+          <span className="hidden items-center gap-1 font-mono md:flex" title="Time limit per test case">
+            <Clock className="h-3.5 w-3.5 text-primary" /> {question?.timeLimitMs || 2000}ms
           </span>
         </div>
       </header>
 
-      {/* Main Split Body */}
-      <div className="flex-1 flex overflow-hidden p-4 gap-4">
-        {/* Left: Problem Details & Tabs */}
-        <div className="w-[45%] bg-white rounded-2xl border border-outline-variant flex flex-col overflow-hidden shadow-sm">
-          {/* Navigation Tabs */}
-          <div className="flex items-center border-b border-outline-variant bg-surface-container-low px-4 gap-1 overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('description')}
-              className={`py-3 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all ${
-                activeTab === 'description' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <FileText className="w-4 h-4" /> Description
-            </button>
-
-            <button
-              onClick={() => setActiveTab('hints')}
-              className={`py-3 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all ${
-                activeTab === 'hints' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Lightbulb className="w-4 h-4" /> Hints ({question?.hints?.length || 0})
-            </button>
-
-            <button
-              onClick={() => setActiveTab('editorial')}
-              className={`py-3 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all ${
-                activeTab === 'editorial' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" /> Editorial
-            </button>
-
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`py-3 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all ${
-                activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <History className="w-4 h-4" /> History
-            </button>
-
-            <button
-              onClick={() => setActiveTab('revision')}
-              className={`py-3 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all ${
-                activeTab === 'revision' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <RotateCcw className="w-4 h-4 text-purple-600" /> SM-2
-            </button>
+      {/* Split body */}
+      <div
+        ref={containerRef}
+        className="flex flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-0 lg:p-4"
+      >
+        {/* Left: details & tabs */}
+        <div
+          className="flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-elev-1 lg:h-full"
+          style={isDesktop ? { width: `${leftPct}%` } : undefined}
+        >
+          <div className="shrink-0 border-b border-outline-variant px-4">
+            <Tabs<PracticeTab> value={activeTab} onChange={setActiveTab} items={tabItems} size="sm" />
           </div>
 
-          {/* Tab Contents */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
+          <div className="flex-1 overflow-y-auto p-5">
             {isLoading ? (
-              <p className="text-xs text-slate-500">Loading problem details...</p>
+              <div className="flex justify-center py-10">
+                <Spinner label="Loading problem…" />
+              </div>
             ) : !question ? (
-              <p className="text-xs text-slate-500">Question not found.</p>
+              <EmptyState icon={<Code2 />} title="Question not found" description="This problem may have been removed." />
             ) : activeTab === 'description' ? (
-              <>
-                <div>
-                  <h2 className="text-xl font-bold text-on-surface mb-1">{question.title}</h2>
-                  <span className="text-xs font-semibold text-primary">{question.topic?.name || 'Algorithms'}</span>
-                </div>
-
-                <div className="text-xs leading-relaxed text-on-surface-variant whitespace-pre-wrap">
-                  {question.description}
-                </div>
-
-                {question.constraints && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                    <h4 className="font-bold text-xs text-slate-700">Constraints:</h4>
-                    <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap">{question.constraints}</pre>
-                  </div>
-                )}
-
-                {/* Sample Testcases */}
-                {question.testCases && question.testCases.length > 0 && (
-                  <div className="space-y-3 pt-2">
-                    <h4 className="font-bold text-xs text-slate-800">Sample Inputs & Expected Outputs:</h4>
-                    {question.testCases.map((tc: any, i: number) => (
-                      <div key={tc.id || i} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs font-mono">
-                        <p className="font-bold text-slate-700">Example {i + 1}:</p>
-                        <p className="text-[11px] text-slate-600">Input: {tc.input}</p>
-                        <p className="text-[11px] text-slate-600">Expected: {tc.expectedOutput}</p>
-                        {tc.explanation && <p className="text-[10px] text-slate-500 italic font-sans mt-1">Explanation: {tc.explanation}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : activeTab === 'hints' ? (
-              <div className="space-y-3">
-                <h3 className="font-bold text-sm text-slate-800">Problem Hints</h3>
-                {question.hints && question.hints.length > 0 ? (
-                  question.hints.map((h: any, i: number) => (
-                    <div key={h.id || i} className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs space-y-1">
-                      <p className="font-bold">Hint #{i + 1}</p>
-                      <p>{h.content}</p>
+              <div className="space-y-4">
+                {isExternal && (
+                  <Alert variant="info" title="External problem">
+                    <div className="space-y-2">
+                      <p>NextHire stores only this problem's metadata and a link — the full statement lives on {SourceLabel(question.sourcePlatform)}.</p>
+                      {question.sourceUrl && (
+                        <a href={question.sourceUrl} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="primary" rightIcon={<ExternalLink className="h-3.5 w-3.5" />}>Open on source</Button>
+                        </a>
+                      )}
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-slate-500">No hints available for this problem.</p>
+                  </Alert>
                 )}
+                <ProblemStatement question={question} />
               </div>
             ) : activeTab === 'editorial' ? (
-              <div className="space-y-3 text-xs leading-relaxed">
-                <h3 className="font-bold text-sm text-slate-800">Official Editorial & Solution</h3>
-                {question.editorial ? (
-                  <div className="space-y-2">
-                    <p className="whitespace-pre-wrap">{question.editorial.content}</p>
-                    {question.editorial.solution && (
-                      <pre className="p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-[11px] overflow-x-auto">
-                        {question.editorial.solution}
-                      </pre>
-                    )}
-                  </div>
+              question.editorial ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-on-surface">Official Editorial</h3>
+                  <MarkdownContent content={question.editorial.content} />
+                  {question.editorial.solution && (
+                    <pre className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-3 font-mono text-[11px] text-on-surface">
+                      {question.editorial.solution}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <EmptyState icon={<BookOpen />} title="No editorial yet" description="The official editorial hasn't been published for this problem." />
+              )
+            ) : activeTab === 'discussion' ? (
+              <EmptyState
+                icon={<MessagesSquare />}
+                title="Discussion coming soon"
+                description="Community solutions and discussion threads will appear here. For now, jot your own approach in the Notes tab."
+                action={<Button size="sm" variant="outline" onClick={() => setActiveTab('notes')}>Open Notes</Button>}
+              />
+            ) : activeTab === 'hints' ? (
+              <div className="space-y-3">
+                {question.hints && question.hints.length > 0 ? (
+                  question.hints.map((h: any, i: number) => (
+                    <Alert key={h.id || i} variant="warning" title={`Hint #${i + 1}`}>
+                      {h.content}
+                    </Alert>
+                  ))
                 ) : (
-                  <p className="text-xs text-slate-500">Official editorial not published yet.</p>
+                  <EmptyState icon={<Lightbulb />} title="No hints available" description="This problem doesn't have hints yet." />
                 )}
               </div>
+            ) : activeTab === 'notes' ? (
+              user ? <NotesPanel questionId={id || ''} /> : <EmptyState icon={<NotebookPen />} title="Sign in to take notes" description="Your private preparation notes are saved per account." />
+            ) : activeTab === 'progress' ? (
+              user ? (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-on-surface">Mark your status</span>
+                    <BookmarkButton questionId={id || ''} bookmarked={question.personal?.progress?.isBookmarked} invalidate={[['question', id]]} />
+                  </div>
+                  <ProgressStatusControl
+                    questionId={id || ''}
+                    status={question.personal?.progress?.status}
+                    invalidate={[['question', id]]}
+                  />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-outline-variant bg-surface-container p-3">
+                      <p className="text-xs uppercase tracking-wide text-on-surface-muted">Attempts</p>
+                      <p className="text-lg font-bold text-on-surface">{question.personal?.progress?.attempts ?? 0}</p>
+                    </div>
+                    <div className="rounded-xl border border-outline-variant bg-surface-container p-3">
+                      <p className="text-xs uppercase tracking-wide text-on-surface-muted">Accepted</p>
+                      <p className="text-lg font-bold text-on-surface">{question.personal?.progress?.acceptedCount ?? 0}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SourceBadge platform={question.sourcePlatform} url={question.sourceUrl} />
+                  </div>
+                </div>
+              ) : <EmptyState icon={<Target />} title="Sign in to track progress" description="Solving, attempts, and bookmarks are saved per account." />
             ) : activeTab === 'history' ? (
               <SubmissionHistoryPanel
                 submissions={submissions}
@@ -221,9 +258,51 @@ export const LivePracticePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Monaco Editor */}
-        <div className="w-[55%] h-full">
-          <MonacoCodeEditor questionId={id} />
+        {/* Drag handle (desktop only) */}
+        <div
+          onMouseDown={startDrag}
+          onDoubleClick={() => setLeftPct(44)}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panels (double-click to reset)"
+          title="Drag to resize · double-click to reset"
+          className="group relative hidden w-2 shrink-0 cursor-col-resize items-center justify-center lg:flex"
+        >
+          <div className="h-full w-px bg-outline-variant transition-colors group-hover:bg-primary" />
+          <div className="absolute flex h-9 w-3.5 items-center justify-center rounded bg-surface-container-high opacity-0 shadow-elev-1 transition-opacity group-hover:opacity-100">
+            <GripVertical className="h-3.5 w-3.5 text-on-surface-muted" />
+          </div>
+        </div>
+
+        {/* Right: Monaco editor (or, for external references, a link-out panel) */}
+        <div className="min-h-[360px] flex-1 lg:h-full">
+          {isExternal ? (
+            <div className="flex h-full items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-lowest p-6 shadow-elev-1">
+              <div className="max-w-sm text-center">
+                <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+                  <ExternalLink className="h-6 w-6" />
+                </span>
+                <h3 className="text-base font-semibold text-on-surface">Solve on the source platform</h3>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  This is an external reference. Open it on {SourceLabel(question.sourcePlatform)} to read the full statement and submit there — then track your progress and notes here.
+                </p>
+                {question.sourceUrl && (
+                  <a href={question.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block">
+                    <Button variant="primary" rightIcon={<ExternalLink className="h-4 w-4" />}>Open problem</Button>
+                  </a>
+                )}
+                <p className="mt-4 text-xs text-on-surface-muted">
+                  Use the <span className="font-medium text-on-surface">Progress</span> and <span className="font-medium text-on-surface">Notes</span> tabs to record how it went.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <MonacoCodeEditor
+              questionId={id}
+              starterCodes={question?.starterCodes}
+              onSubmitted={() => queryClient.invalidateQueries({ queryKey: ['submissions', id] })}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@
 // unit-tested with fakes and no Docker/Redis/DB. judgeWorker.js wires in the real ones.
 
 const { buildEventPayload } = require('./judgeEvents');
+const { recordSubmissionOutcome } = require('../library/progressService');
 
 /**
  * Evaluate one submission end-to-end and persist the result.
@@ -84,6 +85,18 @@ async function processJob({ prisma, executor, publish }, job) {
   // submission for that question (prevents double-counting on repeat submits).
   if (submission.context === 'CONTEST' && submission.contestId && result.status === 'ACCEPTED') {
     await awardContestPoints(prisma, submission);
+  }
+
+  // Question Library: keep the user's personal progress (solved/attempted, attempts, solve
+  // time) in sync with their real submissions. Best-effort — never break the judge verdict.
+  try {
+    await recordSubmissionOutcome(prisma, {
+      userId,
+      questionId: job.questionId,
+      status: result.status
+    });
+  } catch (err) {
+    console.error('[library] progress update failed:', err.message);
   }
 
   // Final event with the verdict.

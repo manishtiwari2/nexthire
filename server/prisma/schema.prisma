@@ -37,6 +37,48 @@ enum ContestStatus {
   ENDED
 }
 
+// Where a referenced problem originates. Extensible: new platforms are added here,
+// but the browse API also accepts arbitrary source strings so data can lead schema.
+enum SourcePlatform {
+  LEETCODE
+  GEEKSFORGEEKS
+  HACKERRANK
+  CODEFORCES
+  CODECHEF
+  ATCODER
+  INTERVIEWBIT
+  CUSTOM
+}
+
+// How often a problem is reported in interviews (coarse band; frequencyScore holds a finer 0-100 value).
+enum FrequencyBand {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+// Authoring/curation lifecycle of a question ("Revision Status" in the product brief).
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+// A user's personal solve state for a question.
+enum ProgressStatus {
+  TODO
+  ATTEMPTED
+  SOLVED
+}
+
+// Curated (system) study sheets vs. user-authored ones.
+enum SheetKind {
+  SYSTEM
+  CUSTOM
+}
+
 enum InterviewStatus {
   SCHEDULED
   WAITING_ROOM
@@ -105,6 +147,9 @@ model User {
   notifications         Notification[]
   aiFeedbacks           AIFeedback[]
   aiHintRequests        AIHintRequest[]
+  studySheets           StudySheet[]           @relation("SheetOwner")
+  questionProgress      UserQuestionProgress[]
+  questionNotes         UserQuestionNote[]
 }
 
 model Profile {
@@ -146,6 +191,22 @@ model Question {
   constraints      String
   timeLimitMs      Int                @default(2000)
   memoryLimitMb    Int                @default(256)
+
+  // --- Question Library metadata ---
+  subtopics        String[]           @default([])
+  frequencyBand    FrequencyBand?
+  frequencyScore   Int?               // finer 0-100 signal when known
+  estimatedTimeMin Int?               // estimated solve time in minutes
+  sourcePlatform   SourcePlatform     @default(CUSTOM)
+  sourceUrl        String?
+  originalAuthor   String?
+  authorNotes      String?            // author/maintainer notes (not the private per-user notes)
+  contentStatus    ContentStatus      @default(PUBLISHED)
+  acceptanceRate   Float?             // internal, if tracked (0-100)
+  // Reference-only problems store metadata + a source link but no local statement/tests;
+  // the solve page links out instead of running the judge.
+  isExternalOnly   Boolean            @default(false)
+
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
@@ -160,8 +221,13 @@ model Question {
   revisions        RevisionSchedule[]
   interviews       Interview[]
   aiHintRequests   AIHintRequest[]
+  sheetItems       SheetItem[]
+  progress         UserQuestionProgress[]
+  userNotes        UserQuestionNote[]
 
   @@index([topicId])
+  @@index([sourcePlatform])
+  @@index([frequencyBand])
 }
 
 model StarterCode {
@@ -248,6 +314,89 @@ model RevisionSchedule {
   nextReviewAt   DateTime
 
   @@unique([userId, questionId])
+}
+
+// ==========================================
+// STUDY SHEETS (curated + user-authored)
+// ==========================================
+
+model StudySheet {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  description String?
+  kind        SheetKind   @default(CUSTOM)
+  ownerId     String?     // null for SYSTEM sheets
+  owner       User?       @relation("SheetOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  isPublic    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items       SheetItem[]
+
+  @@index([ownerId])
+  @@index([kind])
+}
+
+model SheetItem {
+  id         String     @id @default(uuid())
+  sheetId    String
+  sheet      StudySheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  section    String?    // optional grouping label within the sheet (e.g. "Arrays")
+  orderIndex Int        @default(0)
+
+  @@unique([sheetId, questionId])
+  @@index([sheetId])
+}
+
+// ==========================================
+// PER-USER PROGRESS & PRIVATE NOTES
+// ==========================================
+
+model UserQuestionProgress {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  status          ProgressStatus @default(TODO)
+  attempts        Int            @default(0)
+  acceptedCount   Int            @default(0)
+  totalSolveSec   Int            @default(0) // accumulated solve time
+  solveSessions   Int            @default(0) // count of timed sessions (avg = totalSolveSec / solveSessions)
+  isBookmarked    Boolean        @default(false)
+  firstSolvedAt   DateTime?
+  lastPracticedAt DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([questionId])
+  @@index([userId, status])
+}
+
+// Private, per-user preparation notes. Always scoped to the owning user by the API.
+model UserQuestionNote {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  approach        String?
+  mistakes        String?
+  edgeCases       String?
+  timeComplexity  String?
+  spaceComplexity String?
+  keyInsights     String?
+  revisionNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, questionId])
+  @@index([userId])
 }
 
 // ==========================================

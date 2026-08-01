@@ -111,7 +111,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = res.data;
       localStorage.setItem('nexthire_user', JSON.stringify(user));
       set({ user, isAuthenticated: true });
-    } catch (err) {
+    } catch {
       localStorage.removeItem('nexthire_access_token');
       localStorage.removeItem('nexthire_user');
       set({ user: null, token: null, isAuthenticated: false });

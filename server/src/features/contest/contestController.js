@@ -1,5 +1,6 @@
 const { prisma } = require('../../shared/db');
-const { judgeQueueInstance } = require('../judge/judgeQueue');
+const { dispatchJudgeJob } = require('../judge/judgeDispatch');
+const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
 
 // Helper to update contest status based on time
 async function updateContestStatuses() {
@@ -264,6 +265,45 @@ async function submitContestCode(req, res) {
   try {
     const contestId = req.params.id;
     const { questionId, code, language } = req.body;
+    const normalizedLanguage = (language || 'PYTHON').toUpperCase();
+
+    // The contest window is authoritative: a submission is only accepted while the
+    // contest is actually running. This is what makes "the contest ends when the timer
+    // expires" real on the server — not just a label the client shows.
+    const contest = await prisma.contest.findUnique({ where: { id: contestId } });
+    if (!contest) {
+      return res.status(404).json({ success: false, error: 'Contest not found' });
+    }
+    const now = new Date();
+    if (now < contest.startTime) {
+      return res.status(403).json({ success: false, error: 'This contest has not started yet' });
+    }
+    if (contest.status === 'ENDED' || now >= contest.endTime) {
+      return res.status(403).json({ success: false, error: 'This contest has ended; submissions are closed' });
+    }
+
+    // Only accept languages the judge can actually execute (honest verdicts).
+    if (!isLanguageSupported(normalizedLanguage)) {
+      return res.status(400).json({
+        success: false,
+        error: `Language "${normalizedLanguage}" is not supported. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`
+      });
+    }
+
+    // The contest question carries the actual resource limits to judge against.
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
+      select: { id: true, timeLimitMs: true, memoryLimitMb: true }
+    });
+    if (!question) {
+      return res.status(404).json({ success: false, error: 'Question not found' });
+    }
+    const belongsToContest = await prisma.contestQuestion.findFirst({
+      where: { contestId, questionId }
+    });
+    if (!belongsToContest) {
+      return res.status(400).json({ success: false, error: 'Question is not part of this contest' });
+    }
 
     const participant = await prisma.contestParticipant.findUnique({
       where: { contestId_userId: { contestId, userId: req.user.id } }
@@ -280,18 +320,18 @@ async function submitContestCode(req, res) {
         contestId,
         context: 'CONTEST',
         code,
-        language: (language || 'PYTHON').toUpperCase(),
+        language: normalizedLanguage,
         status: 'PENDING'
       }
     });
 
-    const jobId = await judgeQueueInstance.enqueueJob({
+    const jobId = await dispatchJudgeJob({
       submissionId: submission.id,
       questionId,
       code,
-      language: (language || 'PYTHON').toUpperCase(),
-      timeLimitMs: 2000,
-      memoryLimitMb: 256
+      language: normalizedLanguage,
+      timeLimitMs: question.timeLimitMs,
+      memoryLimitMb: question.memoryLimitMb
     });
 
     // Update heartbeat (score is updated by judge worker on ACCEPTED result)
@@ -314,6 +354,7 @@ async function submitContestCode(req, res) {
 }
 
 module.exports = {
+  updateContestStatuses,
   getContests,
   getContestById,
   createContest,
