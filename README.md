@@ -41,7 +41,14 @@ npm install
 cd ../server
 npm run prisma:push
 npm run seed
+npm run migrate:auth   # one-time; safe to re-run. Add --dry-run to preview.
 ```
+
+`migrate:auth` brings pre-existing accounts onto the current auth schema: it rewrites the
+legacy `CANDIDATE` role to `USER`, grandfathers older accounts as email-verified so they are
+not locked out, and re-applies the `ADMIN_EMAILS` allow-list. It never invents passwords —
+accounts created before password auth sign in with Google or use **Forgot password** to set
+one for the first time.
 
 ### **3. Start Development Servers**
 
@@ -61,21 +68,80 @@ Open your browser at `http://localhost:3000`.
 
 ---
 
-## 🔑 Demo Credentials
+## 🔐 Authentication & Authorization
 
-| Role | Email | Password | Permissions |
-|---|---|---|---|
-| **Candidate Persona** | `alex@nexthire.dev` | `AlexPass123!` | Candidate Dashboard, Live Practice, Contests, Waiting Room |
-| **Admin Persona** | `admin@nexthire.dev` | `AdminPass123!` | Admin Question Bank CRUD, Contest Creator, Broadcast Messages |
+Two sign-in methods, both ending in the same server-issued session:
+
+- **Email + password** — bcrypt at 12 rounds, verified email required before first sign-in.
+- **Google OAuth 2.0** — the ID token is verified server-side against Google's published RSA
+  keys (signature, issuer, audience, expiry and `email_verified`). Nothing the client says
+  about the user is trusted. Set `GOOGLE_CLIENT_ID` (+ `GOOGLE_CLIENT_SECRET` for the
+  authorization-code flow) in `.env`; see `.env.example` for the console setup.
+
+**Sessions.** A short-lived access-token JWT (15m) is held in memory only — never in
+`localStorage`, so an XSS bug cannot walk away with a durable credential. The refresh token
+lives in an HTTP-only, SameSite cookie, is stored server-side only as a sha256 hash, and
+**rotates on every use**. Presenting an already-rotated token is treated as theft and revokes
+every session for that account. A page reload restores the session by calling
+`POST /auth/refresh` once at startup.
+
+Access is revocable in real time: every authenticated request re-checks that the account is
+still active and that the token's `tokenVersion` and session are still valid, so logout,
+"sign out everywhere", a password change, an account disable, or a role change all take
+effect immediately rather than when the access token happens to expire.
+
+**Roles.** `ADMIN` is granted solely by the `ADMIN_EMAILS` allow-list — it cannot be set from
+a request body or handed out through the admin API. Everyone else is `USER`; `INTERVIEWER`
+exists and is assignable, wired into the permission matrix but not yet given extra screens.
+Routes declare the *capability* they need (`question:manage`, `user:manage`, …) rather than a
+role; the matrix lives in `server/src/shared/authz.js` and the client receives its resolved
+permission list from `/auth/me`, so the two ends cannot drift.
+
+Also included: rate limiting plus per-account lockout, CSRF protection (double-submit) on the
+cookie-authenticated endpoints, single-use expiring email-verification and password-reset
+tokens, an enumeration-proof forgot-password flow, a per-account security timeline, a
+signed-in-devices list, and admin user management (search, enable/disable, change role, force
+reset, clear lockout, revoke sessions, login history).
+
+Sign-in pages: `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email`.
+Account settings live at `/profile`; admin user management at `/admin/users`.
+
+### **Local development accounts**
+
+There are no shared demo passwords. Create an account at `/register` — with
+`MAIL_PROVIDER=console` the verification link is printed to the server console (and offered
+directly in the UI in development). To get an admin, register with an address listed in
+`ADMIN_EMAILS`, or add your own address to that list and sign in again.
 
 ---
 
 ## 📡 REST API Documentation
 
 ### **Authentication**
-- `POST /api/auth/register` - Register a new candidate or admin account
-- `POST /api/auth/login` - Authenticate & receive JWT access + refresh tokens
-- `GET /api/auth/me` - Fetch authenticated user profile and session details
+- `GET /api/v1/auth/config` - Sign-in page capabilities (Google enabled, password policy)
+- `POST /api/v1/auth/register` - Create an account and send a verification email
+- `POST /api/v1/auth/verify-email` - Consume a single-use verification token
+- `POST /api/v1/auth/resend-verification` - Reissue a verification link
+- `POST /api/v1/auth/login` - Email + password sign-in; sets the refresh cookie
+- `POST /api/v1/auth/google` - Google Identity Services credential (ID token) sign-in
+- `GET /api/v1/auth/google/start` → `GET /api/v1/auth/google/callback` - Authorization-code flow
+- `POST /api/v1/auth/refresh` - Rotate the refresh token, mint a new access token (CSRF)
+- `POST /api/v1/auth/logout` / `POST /api/v1/auth/logout-all` - End this device / every device
+- `GET /api/v1/auth/me` - The caller, with their resolved permission list
+- `POST /api/v1/auth/forgot-password` / `POST /api/v1/auth/reset-password` - Password reset
+- `POST /api/v1/auth/change-password` - Change (or first set) a password
+- `PATCH /api/v1/auth/profile` - Update own name / mobile / avatar / links
+- `GET /api/v1/auth/sessions` / `DELETE /api/v1/auth/sessions/:id` - Signed-in devices
+- `GET /api/v1/auth/security-events` - Own security timeline
+- `POST /api/v1/auth/google/unlink` - Unlink Google (refused if it would lock you out)
+- `GET /api/v1/auth/admin/users` - Admin: search users *(requires `user:manage`)*
+- `PATCH /api/v1/auth/admin/users/:id/status` - Admin: enable / disable an account
+- `PATCH /api/v1/auth/admin/users/:id/role` - Admin: change role
+- `POST /api/v1/auth/admin/users/:id/reset-password` - Admin: email the user a reset link
+- `POST /api/v1/auth/admin/users/:id/unlock` - Admin: clear a brute-force lockout
+- `POST /api/v1/auth/admin/users/:id/revoke-sessions` - Admin: sign a user out everywhere
+- `GET /api/v1/auth/admin/users/:id/login-history` - Admin: authentication history
+- `GET /api/v1/auth/admin/analytics` - Admin: account and auth metrics *(`analytics:read`)*
 
 ### **Questions & Code Execution**
 - `GET /api/questions` - Search & filter question bank by difficulty/category

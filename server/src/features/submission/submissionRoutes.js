@@ -6,7 +6,7 @@ const {
   rejudgeSubmission,
   cancelSubmission
 } = require('./submissionController');
-const { requireAuthenticated, requireAdmin } = require('../auth/authMiddleware');
+const { requireAuthenticated, requirePermission } = require('../auth/authMiddleware');
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ const router = express.Router();
 router.get('/', requireAuthenticated, listSubmissions);
 router.get('/:id', requireAuthenticated, getSubmission);
 router.get('/:id/result', requireAuthenticated, getExecutionResult);
-router.post('/:id/rejudge', requireAuthenticated, requireAdmin, rejudgeSubmission);
+router.post('/:id/rejudge', requireAuthenticated, requirePermission('submission:manage'), rejudgeSubmission);
 router.post('/:id/cancel', requireAuthenticated, cancelSubmission);
 
 module.exports = router;

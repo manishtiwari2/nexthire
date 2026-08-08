@@ -6,6 +6,7 @@ import {
   Minus, Plus, WrapText, Maximize2, Minimize2, Check, BookOpen,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { getAccessToken } from '../../api/tokenStore';
 import { io, Socket } from 'socket.io-client';
 import { awaitVerdict } from '../../api/judgeClient';
 import { useNotificationStore } from '../../store/useNotificationStore';
@@ -73,8 +74,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // Live collaboration socket (only when inside a room). Authenticated so the server accepts it.
   useEffect(() => {
     if (!roomCode) return;
-    const token = localStorage.getItem('nexthire_access_token');
-    const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', { auth: { token } });
+    const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+      // From the in-memory token store, not localStorage — see api/tokenStore.
+      auth: (cb) => cb({ token: getAccessToken() })
+    });
     socketRef.current = socket;
     socket.emit('join-room', { roomCode, userName: 'User' });
     socket.on('code-update', ({ code: newCode, language: newLang }) => {

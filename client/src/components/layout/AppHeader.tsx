@@ -1,31 +1,50 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Menu, LogOut, ShieldCheck, Sparkles, ChevronDown } from 'lucide-react';
+import {
+  Menu,
+  LogOut,
+  ShieldCheck,
+  Sparkles,
+  ChevronDown,
+  MailWarning,
+  Users,
+  UserCog,
+} from 'lucide-react';
 import { Badge } from '../../shared/components/ui';
 import { cn } from '../../shared/lib/cn';
 
 export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> = ({ onMenuClick, title }) => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, isSubmitting } = useAuthStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === 'ADMIN';
+  const canManageUsers = Boolean(user?.permissions?.includes('user:manage'));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
     };
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', onEscape);
+    };
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    setOpen(false);
+    await logout();
+    navigate('/login', { replace: true });
   };
 
-  const avatar = user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(user?.email || 'user')}`;
+  const avatar = user?.avatar || user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(user?.email || 'user')}`;
+  const roleLabel = isAdmin ? 'Administrator' : user?.role === 'INTERVIEWER' ? 'Interviewer' : 'Member';
 
   return (
     <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-outline-variant px-4 sm:px-6">
@@ -50,8 +69,15 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
           <img src={avatar} alt="" className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container object-cover" />
           <span className="hidden text-left sm:block">
             <span className="block text-xs font-semibold leading-tight text-on-surface">{user?.name || user?.email || 'User'}</span>
-            <span className="block text-[10px] leading-tight text-on-surface-muted">{isAdmin ? 'Administrator' : 'Candidate'}</span>
+            <span className="block text-[10px] leading-tight text-on-surface-muted">{roleLabel}</span>
           </span>
+          {user && !user.emailVerified && (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+              title="Email address not verified"
+              aria-label="Email address not verified"
+            />
+          )}
           <ChevronDown className={cn('h-4 w-4 text-on-surface-muted transition-transform', open && 'rotate-180')} />
         </button>
 
@@ -70,16 +96,53 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
             <div className="p-2">
               <Badge variant={isAdmin ? 'accent' : 'primary'} className="w-full justify-center">
                 {isAdmin ? <ShieldCheck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
-                {isAdmin ? 'Admin Access' : 'Candidate'}
+                {isAdmin ? 'Admin access' : roleLabel}
               </Badge>
             </div>
+
+            {user && !user.emailVerified && (
+              <Link
+                to="/profile"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="mx-2 mb-2 flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-container/60 px-2.5 py-2 text-[11px] leading-snug text-on-warning-container transition-colors hover:border-warning/40"
+              >
+                <MailWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                <span>
+                  <span className="font-semibold">Email not verified.</span> Verify it to unlock practice and contests.
+                </span>
+              </Link>
+            )}
+
+            <div className="border-t border-outline-variant p-1.5">
+              <Link
+                to="/profile"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              >
+                <UserCog className="h-4 w-4" /> Account settings
+              </Link>
+              {canManageUsers && (
+                <Link
+                  to="/admin/users"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                >
+                  <Users className="h-4 w-4" /> Manage users
+                </Link>
+              )}
+            </div>
+
             <div className="border-t border-outline-variant p-1.5">
               <button
                 onClick={handleLogout}
                 role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-error-container hover:text-danger"
+                disabled={isSubmitting}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-error-container hover:text-danger disabled:opacity-50"
               >
-                <LogOut className="h-4 w-4" /> Sign out
+                <LogOut className="h-4 w-4" /> {isSubmitting ? 'Signing out…' : 'Sign out'}
               </button>
             </div>
           </div>
