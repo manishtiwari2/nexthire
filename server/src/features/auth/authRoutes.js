@@ -1,12 +1,163 @@
 const express = require('express');
-const { googleLogin, login, getMe } = require('./authController');
-const { requireAuthenticated } = require('./authMiddleware');
+const controller = require('./authController');
+const admin = require('./adminUserController');
+const { requireAuthenticated, requirePermission } = require('./authMiddleware');
+const { requireCsrfToken } = require('./cookies');
+const { rateLimit } = require('../../shared/rateLimit');
+const {
+  validate,
+  registerSchema,
+  loginSchema,
+  googleCredentialSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+  changePasswordSchema,
+  updateProfileSchema,
+  adminListUsersSchema,
+  adminUpdateRoleSchema,
+  adminSetActiveSchema,
+} = require('./authValidators');
 
 const router = express.Router();
 
-router.post('/google', googleLogin);
-router.post('/login', login);
-router.post('/register', login);  // Register uses same logic as login (auto-creates)
-router.get('/me', requireAuthenticated, getMe);
+/**
+ * Rate limits.
+ *
+ * Keyed by IP, with the credential-bearing endpoints also keyed by the email being
+ * targeted so one attacker cannot burn through every user's allowance from one address,
+ * and a shared NAT cannot lock out an office. The per-account lockout in the login flow is
+ * the second layer.
+ */
+const ipKey = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
+const ipEmailKey = (req) => `${ipKey(req)}|${String(req.body?.email || '').toLowerCase()}`;
+
+const loginLimiter = rateLimit({
+  name: 'auth:login',
+  limit: 10,
+  windowSec: 300,
+  keyGenerator: ipEmailKey,
+  message: 'Too many sign-in attempts. Please wait a few minutes and try again.',
+});
+
+const registerLimiter = rateLimit({
+  name: 'auth:register',
+  limit: 5,
+  windowSec: 3600,
+  keyGenerator: ipKey,
+  message: 'Too many accounts created from this network. Please try again later.',
+});
+
+// Tight: each request sends an email, so this is abuse-prevention for our mail reputation
+// as much as for the user's inbox.
+const emailLimiter = rateLimit({
+  name: 'auth:email',
+  limit: 5,
+  windowSec: 900,
+  keyGenerator: ipEmailKey,
+  message: 'Too many requests for that address. Please wait 15 minutes.',
+});
+
+const resetLimiter = rateLimit({
+  name: 'auth:reset',
+  limit: 10,
+  windowSec: 900,
+  keyGenerator: ipKey,
+  message: 'Too many attempts. Please wait a few minutes and try again.',
+});
+
+const refreshLimiter = rateLimit({
+  name: 'auth:refresh',
+  limit: 60,
+  windowSec: 300,
+  keyGenerator: ipKey,
+  message: 'Too many session refreshes. Please try again shortly.',
+});
+
+const googleLimiter = rateLimit({
+  name: 'auth:google',
+  limit: 20,
+  windowSec: 300,
+  keyGenerator: ipKey,
+  message: 'Too many Google sign-in attempts. Please try again shortly.',
+});
+
+// ---------------------------------------------------------------------------
+// Public
+// ---------------------------------------------------------------------------
+
+/** What the sign-in page needs to know (is Google enabled, password policy, …). */
+router.get('/config', controller.getAuthConfig);
+
+router.post('/register', registerLimiter, validate(registerSchema), controller.register);
+router.post('/login', loginLimiter, validate(loginSchema), controller.login);
+
+router.post('/verify-email', resetLimiter, validate(verifyEmailSchema), controller.verifyEmail);
+router.post('/resend-verification', emailLimiter, validate(resendVerificationSchema), controller.resendVerification);
+
+router.post('/forgot-password', emailLimiter, validate(forgotPasswordSchema), controller.forgotPassword);
+router.post('/reset-password', resetLimiter, validate(resetPasswordSchema), controller.resetPassword);
+
+// Google — GIS credential (ID token) flow.
+router.post('/google', googleLimiter, validate(googleCredentialSchema), controller.googleLogin);
+// Google — authorization-code flow. Browser navigations, not XHR.
+router.get('/google/start', googleLimiter, controller.googleStart);
+router.get('/google/callback', controller.googleCallback);
+
+/**
+ * Cookie-authenticated. CSRF-protected because the browser attaches the refresh cookie
+ * automatically and these are state-changing.
+ */
+router.post('/refresh', refreshLimiter, requireCsrfToken, controller.refresh);
+router.post('/logout', requireCsrfToken, controller.logout);
+
+// ---------------------------------------------------------------------------
+// Authenticated
+// ---------------------------------------------------------------------------
+
+router.get('/me', requireAuthenticated, controller.getMe);
+router.post('/logout-all', requireAuthenticated, controller.logoutAll);
+
+router.get('/sessions', requireAuthenticated, controller.listSessions);
+router.delete('/sessions/:id', requireAuthenticated, controller.revokeSession);
+router.get('/security-events', requireAuthenticated, controller.getSecurityEvents);
+
+router.patch(
+  '/profile',
+  requireAuthenticated,
+  requirePermission('profile:manage'),
+  validate(updateProfileSchema),
+  controller.updateProfile
+);
+router.post(
+  '/change-password',
+  requireAuthenticated,
+  resetLimiter,
+  validate(changePasswordSchema),
+  controller.changePassword
+);
+router.post('/google/unlink', requireAuthenticated, controller.unlinkGoogle);
+
+// ---------------------------------------------------------------------------
+// Admin — user management
+// ---------------------------------------------------------------------------
+
+const adminOnly = [requireAuthenticated, requirePermission('user:manage')];
+
+router.get('/admin/users', ...adminOnly, validate(adminListUsersSchema, 'query'), admin.listUsers);
+router.get('/admin/users/:id', ...adminOnly, admin.getUser);
+router.get('/admin/users/:id/login-history', ...adminOnly, admin.getLoginHistory);
+router.patch('/admin/users/:id/status', ...adminOnly, validate(adminSetActiveSchema), admin.setUserStatus);
+router.patch('/admin/users/:id/role', ...adminOnly, validate(adminUpdateRoleSchema), admin.setUserRole);
+router.post('/admin/users/:id/reset-password', ...adminOnly, admin.sendPasswordReset);
+router.post('/admin/users/:id/unlock', ...adminOnly, admin.unlockUser);
+router.post('/admin/users/:id/revoke-sessions', ...adminOnly, admin.revokeUserSessions);
+router.get(
+  '/admin/analytics',
+  requireAuthenticated,
+  requirePermission('analytics:read'),
+  admin.getAuthAnalytics
+);
 
 module.exports = router;

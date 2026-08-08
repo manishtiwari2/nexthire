@@ -1,19 +1,35 @@
-const jwt = require('jsonwebtoken');
-const { JWT_SECRET } = require('../features/auth/authMiddleware');
+const { resolveAccessToken } = require('../features/auth/authMiddleware');
+const { normalizeRole } = require('../shared/authz');
 
 function initSockets(io) {
-  // Socket authentication middleware
-  io.use((socket, next) => {
+  // Socket authentication. Uses the same resolver as the REST middleware, so a disabled
+  // account, a revoked session, or a bumped tokenVersion is rejected at the handshake —
+  // signing out must close the websocket too, not just the HTTP path.
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
     if (!token) {
       return next(new Error('Authentication required'));
     }
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      socket.user = decoded;
-      next();
-    } catch {
-      next(new Error('Invalid token'));
+      const result = await resolveAccessToken(token);
+      if (!result.ok) {
+        const error = new Error(result.error);
+        // Surfaced to the client as `err.data`, so it can refresh and reconnect rather
+        // than treating every handshake failure as fatal.
+        error.data = { code: result.code };
+        return next(error);
+      }
+      socket.user = {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: normalizeRole(result.user.role),
+        sessionId: result.payload.sid || null,
+      };
+      return next();
+    } catch (err) {
+      console.error('[Socket.IO] auth error:', err.message);
+      return next(new Error('Authentication failed'));
     }
   });
 

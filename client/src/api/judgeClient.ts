@@ -4,6 +4,7 @@
 
 import { io, Socket } from 'socket.io-client';
 import { apiClient } from './client';
+import { getAccessToken, onAccessTokenChange } from './tokenStore';
 import type { ExecutionResult, JudgePhase } from '../store/useEditorStore';
 
 let socket: Socket | null = null;
@@ -11,13 +12,34 @@ let socket: Socket | null = null;
 /** Lazily create the shared authenticated socket (joins the user's room server-side). */
 export function getJudgeSocket(): Socket {
   if (!socket) {
-    const token = localStorage.getItem('nexthire_access_token');
     socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
-      auth: { token },
+      // Read at connect time from the in-memory token store, and refreshed below — the
+      // server rejects the handshake for a stale token, so a rotated token must be
+      // reflected here or the socket silently stops reconnecting.
+      auth: (cb) => cb({ token: getAccessToken() }),
       transports: ['websocket', 'polling']
+    });
+
+    onAccessTokenChange((token) => {
+      if (!socket) return;
+      if (!token) {
+        // Signed out: drop the connection rather than letting the server reject it.
+        socket.disconnect();
+        return;
+      }
+      if (!socket.connected) socket.connect();
     });
   }
   return socket;
+}
+
+/** Tear the socket down on sign-out so the next user gets a fresh, correctly-authed one. */
+export function resetJudgeSocket(): void {
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
 }
 
 interface ResultDto {

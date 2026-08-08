@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuthenticated, attachUser } = require('../auth/authMiddleware');
+const { requireAuthenticated, requirePermission, attachUser } = require('../auth/authMiddleware');
 
 const sheets = require('./sheetController');
 const progress = require('./progressController');
@@ -13,31 +13,35 @@ const router = express.Router();
 // Listing/reading personalise for a signed-in user but stay open to anonymous visitors.
 router.get('/sheets', attachUser, sheets.listSheets);
 router.get('/sheets/:slug', attachUser, sheets.getSheet);
-router.post('/sheets', requireAuthenticated, sheets.createSheet);
-router.put('/sheets/:id', requireAuthenticated, sheets.updateSheet);
-router.delete('/sheets/:id', requireAuthenticated, sheets.deleteSheet);
-router.post('/sheets/:id/items', requireAuthenticated, sheets.addSheetItem);
-router.delete('/sheets/:id/items/:questionId', requireAuthenticated, sheets.removeSheetItem);
-router.put('/sheets/:id/reorder', requireAuthenticated, sheets.reorderSheet);
+// Sheet ownership is enforced per-record in the controller; the permission gate here only
+// establishes that the caller may author sheets at all.
+const manageOwnSheets = [requireAuthenticated, requirePermission('sheet:manage-own')];
+router.post('/sheets', ...manageOwnSheets, sheets.createSheet);
+router.put('/sheets/:id', ...manageOwnSheets, sheets.updateSheet);
+router.delete('/sheets/:id', ...manageOwnSheets, sheets.deleteSheet);
+router.post('/sheets/:id/items', ...manageOwnSheets, sheets.addSheetItem);
+router.delete('/sheets/:id/items/:questionId', ...manageOwnSheets, sheets.removeSheetItem);
+router.put('/sheets/:id/reorder', ...manageOwnSheets, sheets.reorderSheet);
 
 // ---- Progress (always personal) ----
-router.get('/progress', requireAuthenticated, progress.listProgress);
-router.get('/progress/stats', requireAuthenticated, progress.getStats);
-router.get('/progress/activity', requireAuthenticated, progress.getActivity);
-router.patch('/progress/:questionId', requireAuthenticated, progress.setStatus);
-router.post('/progress/:questionId/bookmark', requireAuthenticated, progress.toggleBookmark);
+router.get('/progress', requireAuthenticated, requirePermission('progress:read'), progress.listProgress);
+router.get('/progress/stats', requireAuthenticated, requirePermission('progress:read'), progress.getStats);
+router.get('/progress/activity', requireAuthenticated, requirePermission('progress:read'), progress.getActivity);
+router.patch('/progress/:questionId', requireAuthenticated, requirePermission('practice:use'), progress.setStatus);
+router.post('/progress/:questionId/bookmark', requireAuthenticated, requirePermission('practice:use'), progress.toggleBookmark);
 
 // ---- Private notes ----
-router.get('/notes/:questionId', requireAuthenticated, notes.getNote);
-router.put('/notes/:questionId', requireAuthenticated, notes.upsertNote);
+const manageNotes = [requireAuthenticated, requirePermission('notes:manage')];
+router.get('/notes/:questionId', ...manageNotes, notes.getNote);
+router.put('/notes/:questionId', ...manageNotes, notes.upsertNote);
 
 // ---- Practice modes ----
 router.get('/practice/random', attachUser, practice.random);
 router.get('/practice/daily', attachUser, practice.daily);
 router.get('/practice/topic/:slug', attachUser, practice.byTopic);
 router.get('/practice/company/:slug', attachUser, practice.byCompany);
-router.get('/practice/revision-queue', requireAuthenticated, practice.revisionQueue);
-router.get('/practice/weak-topics', requireAuthenticated, practice.weakTopics);
+router.get('/practice/revision-queue', requireAuthenticated, requirePermission('revision:use'), practice.revisionQueue);
+router.get('/practice/weak-topics', requireAuthenticated, requirePermission('progress:read'), practice.weakTopics);
 router.get('/practice/mixed', attachUser, practice.mixed);
 router.post('/practice/mock', attachUser, practice.mock);
 

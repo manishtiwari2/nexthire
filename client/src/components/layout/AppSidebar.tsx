@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp, LayoutDashboard, RotateCcw } from 'lucide-react';
+import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp, LayoutDashboard, RotateCcw, Users } from 'lucide-react';
 import { cn } from '../../shared/lib/cn';
 
 interface NavItem {
@@ -30,6 +30,7 @@ const candidateNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { name: 'Create Question', path: '/admin/questions/create', icon: Database },
   { name: 'Create Assessment', path: '/admin/contests/create', icon: PlusCircle },
+  { name: 'User Management', path: '/admin/users', icon: Users },
 ];
 
 const NavSection: React.FC<{ label: React.ReactNode; items: NavItem[]; onNavigate?: () => void }> = ({
@@ -147,7 +148,11 @@ export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
             <p className="flex items-center gap-1.5 text-xs font-semibold text-on-surface">
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Candidate workspace
             </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-on-surface-variant">Practice DSA problems and join live assessments.</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-on-surface-variant">
+              {user?.role === 'INTERVIEWER'
+                ? 'Practice DSA problems and host interview sessions.'
+                : 'Practice DSA problems and join live assessments.'}
+            </p>
           </div>
         )}
       </div>

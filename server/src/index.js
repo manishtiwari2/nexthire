@@ -2,8 +2,16 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 require('dotenv').config();
+
+const { assertProductionConfig, authConfig } = require('./features/auth/authConfig');
+const { pruneExpiredSessions } = require('./features/auth/sessionService');
+
+// Refuse to boot a production process with dev secrets, insecure cookies, or a mail
+// provider that silently drops verification emails. Better a crash than a quiet downgrade.
+assertProductionConfig();
 
 const authRoutes = require('./features/auth/authRoutes');
 const questionRoutes = require('./features/question-bank/questionRoutes');
@@ -30,8 +38,52 @@ const io = new Server(server, {
 });
 
 // Middleware
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+// `credentials: true` + an explicit origin (never `*`) is required for the HTTP-only
+// refresh cookie to be sent and accepted cross-origin.
+app.use(
+  cors({
+    // An explicit allow-list, never `*` — the spec forbids a wildcard origin on
+    // credentialed requests, so a wildcard would silently break the refresh cookie.
+    origin(origin, callback) {
+      // No Origin header: same-origin navigation, curl, or a server-to-server call.
+      if (!origin) return callback(null, true);
+      if (authConfig.allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    exposedHeaders: ['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'],
+  })
+);
 app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+
+// `X-Forwarded-For` is only believed when TRUST_PROXY says we are behind one; otherwise a
+// client could spoof its IP and poison rate-limit buckets and audit records.
+if (process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1') {
+  app.set('trust proxy', 1);
+}
+
+// Baseline security headers. Deliberately hand-rolled rather than pulling in helmet: this
+// is a JSON API plus a static SPA bundle, so only a handful of headers actually apply.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  // Auth responses must never be cached by a proxy or the browser's back/forward cache.
+  if (req.path.startsWith('/api/v1/auth') || req.path.startsWith('/api/auth')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+  }
+  if (authConfig.isProduction) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // WebSockets
@@ -64,6 +116,20 @@ const contestSweep = setInterval(() => {
 }, CONTEST_SWEEP_MS);
 if (contestSweep.unref) contestSweep.unref();
 
+// Session housekeeping: drop rows for sessions that expired or were revoked long ago so
+// the table does not grow without bound. Purely cosmetic for correctness — expiry is
+// always enforced at read time.
+const SESSION_PRUNE_MS = Number(process.env.SESSION_PRUNE_MS) || 6 * 60 * 60 * 1000;
+const runPrune = () =>
+  pruneExpiredSessions()
+    .then((count) => {
+      if (count) console.log(`🧹 [auth] pruned ${count} stale session row(s).`);
+    })
+    .catch((err) => console.error('[auth] session prune failed:', err.message));
+runPrune();
+const sessionPrune = setInterval(runPrune, SESSION_PRUNE_MS);
+if (sessionPrune.unref) sessionPrune.unref();
+
 // Health Check & OpenAPI Docs
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'NextHire Production REST API (v1)', timestamp: new Date().toISOString() });
@@ -88,11 +154,25 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/library', libraryRoutes);
 app.use('/api/revision', revisionRoutes);
 
+// 404 for unmatched API routes — otherwise a typo'd path falls through to the error
+// handler and reports a confusing 500.
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, error: `No route for ${req.method} ${req.originalUrl}`, code: 'NOT_FOUND' });
+});
+
 // Global Error Handler
 // eslint-disable-next-line no-unused-vars -- Express identifies error middleware by its 4-arg signature.
 app.use((err, req, res, _next) => {
   console.error('[Express Error]', err);
-  res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
+  // Internal messages can carry table names, query fragments and file paths. Log them,
+  // but never ship them to a client in production.
+  res.status(err.status || 500).json({
+    success: false,
+    error: authConfig.isProduction
+      ? 'Something went wrong. Please try again.'
+      : err.message || 'Internal Server Error',
+    code: err.code || 'INTERNAL_ERROR',
+  });
 });
 
 const PORT = process.env.PORT || 5000;

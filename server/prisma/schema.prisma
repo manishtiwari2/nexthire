@@ -13,7 +13,46 @@ generator client {
 
 enum Role {
   ADMIN
+  USER
+  // Reserved for the interviewer experience (panel/host tooling). No permissions are
+  // granted to it yet beyond USER — see shared/authz.js for the permission matrix.
+  INTERVIEWER
+  /// @deprecated Legacy name for USER. Retained so existing rows stay readable during
+  /// migration; `scripts/migrateAuth.js` rewrites CANDIDATE -> USER.
   CANDIDATE
+}
+
+// Which credential a login/session was established with.
+enum AuthProvider {
+  PASSWORD
+  GOOGLE
+}
+
+// Single-use, hashed tokens emailed to the user.
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+// Audit trail for the account security timeline (surfaced in Profile + Admin).
+enum AuthEventType {
+  REGISTER
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  LOGOUT_ALL
+  TOKEN_REFRESH
+  TOKEN_REUSE_DETECTED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET
+  PASSWORD_CHANGED
+  EMAIL_VERIFIED
+  ACCOUNT_LOCKED
+  ACCOUNT_DISABLED
+  ACCOUNT_ENABLED
+  ROLE_CHANGED
+  GOOGLE_LINKED
+  GOOGLE_UNLINKED
 }
 
 enum Difficulty {
@@ -129,12 +168,45 @@ model User {
   id                    String                 @id @default(uuid())
   email                 String                 @unique
   name                  String
-  role                  Role                   @default(CANDIDATE)
+  role                  Role                   @default(USER)
+  /// Profile picture. Historic column name; `avatar` in the API DTO maps to this.
   avatarUrl             String?
   googleId              String?                @unique
+  /// Legacy flag kept for backward compatibility with pre-auth-rewrite rows and any
+  /// code that still reads it. `emailVerified` is the field the auth system enforces.
   isVerified            Boolean                @default(true)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+
+  // --- Credentials ---
+  /// bcrypt hash (12 rounds). Null for Google-only accounts. Never serialised.
+  passwordHash          String?
+  passwordChangedAt     DateTime?
+  /// E.164 phone number, unique across accounts. Null for Google-created accounts
+  /// until the user completes their profile.
+  mobile                String?                @unique
+
+  // --- Verification ---
+  emailVerified         Boolean                @default(false)
+  emailVerifiedAt       DateTime?
+  mobileVerified        Boolean                @default(false)
+
+  // --- Account state ---
+  isActive              Boolean                @default(true)
+  disabledReason        String?
+  /// Bumped on "log out everywhere", password change/reset, disable, and role change.
+  /// Access tokens carry the version they were minted with and are rejected once stale.
+  tokenVersion          Int                    @default(0)
+  failedLoginAttempts   Int                    @default(0)
+  lockedUntil           DateTime?
+
+  // --- Activity ---
+  lastLogin             DateTime?
+  lastActive            DateTime?
+
+  sessions              Session[]
+  authTokens            AuthToken[]
+  authEvents            AuthEvent[]
 
   profile               Profile?
   submissions           Submission[]
@@ -150,6 +222,73 @@ model User {
   studySheets           StudySheet[]           @relation("SheetOwner")
   questionProgress      UserQuestionProgress[]
   questionNotes         UserQuestionNote[]
+}
+
+/// One row per signed-in device. Holds the *hash* of a refresh token, never the token
+/// itself, so a database leak cannot be replayed. Rotation replaces the row's hash and
+/// records the previous one in `previousTokenHash` for one-step reuse detection.
+model Session {
+  id                String       @id @default(uuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// sha256 of the current refresh token.
+  tokenHash         String       @unique
+  /// sha256 of the token this one replaced. If a client presents it again, the family
+  /// has been stolen/replayed and every session for the user is revoked.
+  previousTokenHash String?      @unique
+  provider          AuthProvider @default(PASSWORD)
+  /// "Remember me" sessions get the long refresh TTL and a persistent cookie.
+  rememberMe        Boolean      @default(false)
+  userAgent         String?
+  browser           String?
+  os                String?
+  device            String?
+  ipAddress         String?
+  expiresAt         DateTime
+  lastUsedAt        DateTime     @default(now())
+  revokedAt         DateTime?
+  revokedReason     String?
+  createdAt         DateTime     @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Single-use email verification / password reset tokens. Only the sha256 hash is
+/// stored, so the raw token exists solely inside the emailed link.
+model AuthToken {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+/// Security timeline. `userId` is null for failed logins against unknown emails so
+/// the event is still rate-limit auditable without leaking account existence.
+model AuthEvent {
+  id        String        @id @default(uuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Lowercased email the attempt was made with (kept even when userId is null).
+  email     String?
+  type      AuthEventType
+  provider  AuthProvider?
+  /// Short machine-readable outcome, e.g. "invalid_password", "account_disabled".
+  detail    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+  @@index([type, createdAt])
 }
 
 model Profile {
