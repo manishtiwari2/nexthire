@@ -669,6 +669,11 @@ model Submission {
   code        String
   language    Language
   status      SubmissionStatus  @default(PENDING)
+  /// "Run" (try the samples) rather than "Submit" (final attempt against every test).
+  /// A trial run is judged against SAMPLE test cases only, is excluded from submission
+  /// history, and never touches progress, streaks, acceptance rate or contest score.
+  /// It still needs a row because the verdict is delivered by submission id.
+  isTrialRun  Boolean           @default(false)
   createdAt   DateTime          @default(now())
 
   executions  ExecutionResult[]
@@ -677,6 +682,8 @@ model Submission {
   @@index([questionId])
   @@index([contestId])
   @@index([interviewId])
+  // History and progress queries always filter trial runs out.
+  @@index([userId, isTrialRun])
 }
 
 model ExecutionResult {

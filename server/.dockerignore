@@ -1,0 +1,23 @@
+# Keep secrets and host-built artefacts out of the image.
+#
+# The Dockerfile does `COPY . .`, so without this an `.env` sitting in the working tree would
+# be baked into every layer of the published image — recoverable by anyone who can pull it.
+.env
+.env.*
+!.env.example
+
+node_modules
+npm-debug.log*
+
+# Prisma's engines are regenerated inside the image for the correct platform; copying the
+# host's (Windows/macOS) binaries in would shadow them.
+node_modules/.prisma
+
+# Tests, local scratch files and logs add weight and never run in the image.
+test
+*.log
+_*.tmp.js
+uploads
+dist
+.git
+.gitignore

@@ -1,45 +1,150 @@
-version: '3.8'
+# NextHire — full stack.
+#
+#   docker compose up -d --build
+#
+# Brings up PostgreSQL, Redis, the API, the judge worker and the built frontend.
+# Configuration comes from a `.env` file next to this one (copy .env.example and fill it in);
+# every value below has a development-only default so a fresh checkout still starts.
+#
+# BEFORE FIRST RUN, pull the judge sandbox images onto the host — the worker shells out to the
+# host Docker daemon to create them, and a missing image surfaces as INTERNAL_ERROR verdicts:
+#   docker pull python:3.10-slim && docker pull gcc:13 && docker pull eclipse-temurin:17-jdk
+
+name: nexthire
+
+x-db-url: &db-url
+  DATABASE_URL: "postgresql://${POSTGRES_USER:-nexthire}:${POSTGRES_PASSWORD:-nexthire_password}@postgres:5432/${POSTGRES_DB:-nexthire_db}?schema=public"
 
 services:
   postgres:
     image: postgres:15-alpine
     container_name: nexthire-db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: nexthire
-      POSTGRES_PASSWORD: nexthire_password
-      POSTGRES_DB: nexthire_db
+      POSTGRES_USER: ${POSTGRES_USER:-nexthire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexthire_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nexthire_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Dependants wait on this, so the API never races the database on a cold start.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexthire} -d ${POSTGRES_DB:-nexthire_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   redis:
     image: redis:7-alpine
     container_name: nexthire-redis
+    restart: unless-stopped
+    # appendonly: queued submissions survive a Redis restart instead of being silently dropped.
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Express API + Socket.IO. Does NOT execute submissions; it only enqueues them.
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: nexthire-api
+    restart: unless-stopped
+    command: ["npm", "start"]
+    environment:
+      <<: *db-url
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "5000"
+      REDIS_URL: "redis://redis:6379"
+      # Queue mode: the worker below does the judging. Never set JUDGE_INLINE here.
+      JUDGE_INLINE: "0"
+      # Generate with -> node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env (48 random bytes)}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:?set ADMIN_EMAILS in .env - these addresses get ADMIN on sign-in}"
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      # Behind the nginx frontend / a load balancer, so X-Forwarded-For is trustworthy.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      MAIL_PROVIDER: "${MAIL_PROVIDER:?use smtp, resend or sendgrid - production refuses the console mailer}"
+      MAIL_FROM: "${MAIL_FROM:-NextHire <no-reply@nexthire.local>}"
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_API_KEY: ${MAIL_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-true}
+    ports:
+      - "${API_PORT:-5000}:5000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   # Judge worker: consumes the BullMQ queue and executes submissions inside Docker.
-  # It needs access to the host Docker daemon to spawn per-submission sandbox containers,
-  # so the Docker socket is mounted read-only. Run one or more replicas to scale throughput.
+  #
+  # SECURITY: mounting the host Docker socket is equivalent to root on the host. It is how the
+  # worker creates per-submission sandbox containers. Run the worker on a host dedicated to
+  # judging (or swap in a rootless/remote Docker endpoint via JUDGE_DOCKER_BIN + DOCKER_HOST);
+  # do not co-locate it with anything sensitive. Scale with `--scale judge-worker=N`.
   judge-worker:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: nexthire-judge-worker
+    restart: unless-stopped
     command: ["npm", "run", "worker"]
     environment:
-      DATABASE_URL: "postgresql://nexthire:nexthire_password@postgres:5432/nexthire_db?schema=public"
+      <<: *db-url
+      NODE_ENV: ${NODE_ENV:-production}
       REDIS_URL: "redis://redis:6379"
-      JUDGE_CONCURRENCY: "4"
+      JUDGE_CONCURRENCY: ${JUDGE_CONCURRENCY:-4}
+      JUDGE_IMAGE_PYTHON: ${JUDGE_IMAGE_PYTHON:-python:3.10-slim}
+      JUDGE_IMAGE_CPP: ${JUDGE_IMAGE_CPP:-gcc:13}
+      JUDGE_IMAGE_JAVA: ${JUDGE_IMAGE_JAVA:-eclipse-temurin:17-jdk}
+      # The sandbox is the only thing between untrusted code and the host. Never "1".
+      JUDGE_UNSAFE_LOCAL: "0"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:?set ADMIN_EMAILS in .env}"
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-smtp}
+      SMTP_URL: ${SMTP_URL:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - postgres
-      - redis
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # Built SPA served by nginx, which also reverse-proxies /api and /socket.io to the API so
+  # the browser sees one origin (which keeps the refresh cookie same-site).
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    container_name: nexthire-client
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_started }
 
 volumes:
   pgdata:

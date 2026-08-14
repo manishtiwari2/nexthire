@@ -176,6 +176,12 @@ function assertProductionConfig() {
   if (authConfig.accessTokenSecret.length < 32) {
     problems.push('JWT access secret must be at least 32 characters');
   }
+  // The admin allow-list falls back to the maintainers' own addresses so a local checkout
+  // has a working admin. Shipping that fallback to a real deployment would hand ADMIN to
+  // whoever controls those inboxes, so production must name its own admins.
+  if (!process.env.ADMIN_EMAILS) {
+    problems.push('ADMIN_EMAILS must be set explicitly in production (the built-in default is for local development only)');
+  }
   if (!authConfig.cookies.secure) {
     problems.push('COOKIE_SECURE must not be disabled in production');
   }
@@ -187,6 +193,18 @@ function assertProductionConfig() {
   }
   if (['resend', 'sendgrid'].includes(authConfig.mail.provider) && !authConfig.mail.apiKey) {
     problems.push(`MAIL_API_KEY is required when MAIL_PROVIDER=${authConfig.mail.provider}`);
+  }
+  // DISABLE_RATE_LIMIT is a test-suite escape hatch. Leaking it into a deployed environment
+  // would silently remove every brute-force and abuse control, so refuse to boot with it.
+  if (process.env.DISABLE_RATE_LIMIT === '1') {
+    problems.push('DISABLE_RATE_LIMIT=1 is a test-only flag and must not be set in production');
+  }
+  // The judge sandbox is what stands between untrusted user code and the host.
+  if (process.env.JUDGE_UNSAFE_LOCAL === '1') {
+    problems.push('JUDGE_UNSAFE_LOCAL=1 runs submitted code with no sandbox and must not be set in production');
+  }
+  if (process.env.AUTH_VERBOSE_LOGIN_ERRORS === 'true') {
+    problems.push('AUTH_VERBOSE_LOGIN_ERRORS must be off in production — it is a user-enumeration oracle');
   }
 
   if (problems.length) {

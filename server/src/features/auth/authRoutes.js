@@ -49,6 +49,16 @@ const registerLimiter = rateLimit({
   message: 'Too many accounts created from this network. Please try again later.',
 });
 
+/**
+ * Signup traffic that never reaches account creation (a mistyped email, a password that
+ * fails the policy) must not consume the hourly signup budget — otherwise a single user
+ * fumbling the form is locked out for an hour, and a whole office behind one NAT with them.
+ *
+ * So the limiter runs *after* validation: only well-formed attempts count. Volume is still
+ * bounded, because a malformed request costs nothing but a schema parse.
+ */
+const registerGuard = [validate(registerSchema), registerLimiter];
+
 // Tight: each request sends an email, so this is abuse-prevention for our mail reputation
 // as much as for the user's inbox.
 const emailLimiter = rateLimit({
@@ -90,7 +100,7 @@ const googleLimiter = rateLimit({
 /** What the sign-in page needs to know (is Google enabled, password policy, …). */
 router.get('/config', controller.getAuthConfig);
 
-router.post('/register', registerLimiter, validate(registerSchema), controller.register);
+router.post('/register', ...registerGuard, controller.register);
 router.post('/login', loginLimiter, validate(loginSchema), controller.login);
 
 router.post('/verify-email', resetLimiter, validate(verifyEmailSchema), controller.verifyEmail);

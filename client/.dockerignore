@@ -1,0 +1,15 @@
+# Keep secrets and host-built artefacts out of the build context.
+.env
+.env.*
+!.env.example
+
+node_modules
+npm-debug.log*
+
+# Rebuilt inside the image; copying the host build in would mask a broken build.
+dist
+.vite
+
+.git
+.gitignore
+Dockerfile
