@@ -47,8 +47,8 @@ npm run migrate:auth   # one-time; safe to re-run. Add --dry-run to preview.
 `migrate:auth` brings pre-existing accounts onto the current auth schema: it rewrites the
 legacy `CANDIDATE` role to `USER`, grandfathers older accounts as email-verified so they are
 not locked out, and re-applies the `ADMIN_EMAILS` allow-list. It never invents passwords —
-accounts created before password auth sign in with Google or use **Forgot password** to set
-one for the first time.
+accounts created before password auth sign in with a provider (Google / GitHub) or use
+**Forgot password** to set one for the first time.
 
 ### **3. Start Development Servers**
 
@@ -70,13 +70,31 @@ Open your browser at `http://localhost:3000`.
 
 ## 🔐 Authentication & Authorization
 
-Two sign-in methods, both ending in the same server-issued session:
+Three sign-in methods, all ending in the same server-issued session:
 
 - **Email + password** — bcrypt at 12 rounds, verified email required before first sign-in.
 - **Google OAuth 2.0** — the ID token is verified server-side against Google's published RSA
   keys (signature, issuer, audience, expiry and `email_verified`). Nothing the client says
   about the user is trusted. Set `GOOGLE_CLIENT_ID` (+ `GOOGLE_CLIENT_SECRET` for the
   authorization-code flow) in `.env`; see `.env.example` for the console setup.
+- **GitHub OAuth 2.0** — authorization-code flow only. GitHub is not an OpenID Connect
+  provider, so there is no ID token and no browser-side SDK: the server exchanges the code
+  and reads the profile from the GitHub API itself, and the browser never handles a GitHub
+  token. Set `GITHUB_CLIENT_ID` **and** `GITHUB_CLIENT_SECRET` in `server/.env`.
+
+**Account linking.** Signing in with a provider whose email matches an existing account
+attaches the identity to that account rather than creating a duplicate. That is safe only
+because a provider email is accepted **only when the provider reports it as verified** —
+`email_verified` for Google, and a `verified: true` entry from GitHub's `/user/emails`. An
+unverified address is never trusted, in either direction: without that rule anyone could put
+someone else's address on a throwaway provider account and inherit their NextHire account.
+GitHub's `/user`.email field is deliberately ignored, because it carries no verification
+status. Both providers run through one `upsertOAuthUser` in `authController.js`, so the
+linking rules cannot drift apart between them.
+
+Unlinking a provider is refused when it is the account's last remaining sign-in method — with
+two providers plus passwords, "can they still get in?" is no longer the same question as "do
+they have a password?".
 
 **Sessions.** A short-lived access-token JWT (15m) is held in memory only — never in
 `localStorage`, so an XSS bug cannot walk away with a durable credential. The refresh token
@@ -118,13 +136,14 @@ directly in the UI in development). To get an admin, register with an address li
 ## 📡 REST API Documentation
 
 ### **Authentication**
-- `GET /api/v1/auth/config` - Sign-in page capabilities (Google enabled, password policy)
+- `GET /api/v1/auth/config` - Sign-in page capabilities (which providers are enabled, password policy)
 - `POST /api/v1/auth/register` - Create an account and send a verification email
 - `POST /api/v1/auth/verify-email` - Consume a single-use verification token
 - `POST /api/v1/auth/resend-verification` - Reissue a verification link
 - `POST /api/v1/auth/login` - Email + password sign-in; sets the refresh cookie
 - `POST /api/v1/auth/google` - Google Identity Services credential (ID token) sign-in
 - `GET /api/v1/auth/google/start` → `GET /api/v1/auth/google/callback` - Authorization-code flow
+- `GET /api/v1/auth/github/start` → `GET /api/v1/auth/github/callback` - GitHub authorization-code flow
 - `POST /api/v1/auth/refresh` - Rotate the refresh token, mint a new access token (CSRF)
 - `POST /api/v1/auth/logout` / `POST /api/v1/auth/logout-all` - End this device / every device
 - `GET /api/v1/auth/me` - The caller, with their resolved permission list
@@ -134,6 +153,7 @@ directly in the UI in development). To get an admin, register with an address li
 - `GET /api/v1/auth/sessions` / `DELETE /api/v1/auth/sessions/:id` - Signed-in devices
 - `GET /api/v1/auth/security-events` - Own security timeline
 - `POST /api/v1/auth/google/unlink` - Unlink Google (refused if it would lock you out)
+- `POST /api/v1/auth/github/unlink` - Unlink GitHub (refused if it would lock you out)
 - `GET /api/v1/auth/admin/users` - Admin: search users *(requires `user:manage`)*
 - `PATCH /api/v1/auth/admin/users/:id/status` - Admin: enable / disable an account
 - `PATCH /api/v1/auth/admin/users/:id/role` - Admin: change role

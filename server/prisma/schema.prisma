@@ -26,6 +26,7 @@ enum Role {
 enum AuthProvider {
   PASSWORD
   GOOGLE
+  GITHUB
 }
 
 // Single-use, hashed tokens emailed to the user.
@@ -53,6 +54,8 @@ enum AuthEventType {
   ROLE_CHANGED
   GOOGLE_LINKED
   GOOGLE_UNLINKED
+  GITHUB_LINKED
+  GITHUB_UNLINKED
 }
 
 enum Difficulty {
@@ -172,6 +175,10 @@ model User {
   /// Profile picture. Historic column name; `avatar` in the API DTO maps to this.
   avatarUrl             String?
   googleId              String?                @unique
+  /// GitHub's numeric account id, as a string. The *id* and not the login name, because a
+  /// GitHub user can rename themselves and a freed-up login can be claimed by someone else
+  /// — joining on the name would hand over the account with it.
+  githubId              String?                @unique
   /// Legacy flag kept for backward compatibility with pre-auth-rewrite rows and any
   /// code that still reads it. `emailVerified` is the field the auth system enforces.
   isVerified            Boolean                @default(true)
@@ -179,10 +186,11 @@ model User {
   updatedAt             DateTime               @updatedAt
 
   // --- Credentials ---
-  /// bcrypt hash (12 rounds). Null for Google-only accounts. Never serialised.
+  /// bcrypt hash (12 rounds). Null for accounts that only sign in through an OAuth
+  /// provider (Google / GitHub) and have never set one. Never serialised.
   passwordHash          String?
   passwordChangedAt     DateTime?
-  /// E.164 phone number, unique across accounts. Null for Google-created accounts
+  /// E.164 phone number, unique across accounts. Null for OAuth-created accounts
   /// until the user completes their profile.
   mobile                String?                @unique
 

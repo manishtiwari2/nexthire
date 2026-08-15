@@ -115,6 +115,39 @@ const authConfig = {
     },
   },
 
+  // ---- GitHub OAuth ------------------------------------------------------------
+  /**
+   * GitHub is OAuth 2.0 only — not OpenID Connect. There is no ID token to verify, so the
+   * authorization-code flow is the *only* option: the server exchanges the code for an
+   * access token and then reads the profile from the GitHub API itself. That also means
+   * there is no browser-side equivalent of Google Identity Services here, and no `nonce`
+   * (nothing is signed for us to replay-protect) — `state` carries the whole CSRF burden.
+   */
+  github: {
+    clientId: process.env.GITHUB_CLIENT_ID || '',
+    clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+    /** Must exactly match the "Authorization callback URL" of the GitHub OAuth app. */
+    redirectUri:
+      process.env.GITHUB_REDIRECT_URI ||
+      `http://localhost:${process.env.PORT || 5000}/api/v1/auth/github/callback`,
+    /**
+     * Scopes. `read:user` is enough for the profile; `user:email` is what makes the
+     * *verified* address readable even when the user keeps it private. Both are read-only
+     * — nothing here can touch a repository.
+     */
+    scope: process.env.GITHUB_SCOPE || 'read:user user:email',
+    /**
+     * Host overrides for GitHub Enterprise Server, where OAuth lives on the appliance
+     * (`https://ghe.example.com`) and the API under `/api/v3`. Defaults are github.com.
+     */
+    oauthBaseUrl: (process.env.GITHUB_OAUTH_BASE_URL || 'https://github.com').replace(/\/$/, ''),
+    apiBaseUrl: (process.env.GITHUB_API_BASE_URL || 'https://api.github.com').replace(/\/$/, ''),
+    /** GitHub needs both halves before any part of the flow can work. */
+    get isConfigured() {
+      return Boolean(this.clientId && this.clientSecret);
+    },
+  },
+
   // ---- Email -------------------------------------------------------------------
   mail: {
     /** console | smtp | resend | sendgrid */

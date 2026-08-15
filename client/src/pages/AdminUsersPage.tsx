@@ -361,6 +361,7 @@ export const AdminUsersPage: React.FC = () => {
                               </Badge>
                             )}
                             {user.googleLinked && <Badge variant="default">Google</Badge>}
+                            {user.githubLinked && <Badge variant="default">GitHub</Badge>}
                           </div>
                         </TD>
 

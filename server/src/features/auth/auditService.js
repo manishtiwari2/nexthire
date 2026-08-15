@@ -12,7 +12,7 @@ const { prisma } = require('../../shared/db');
  *   type: string,
  *   userId?: string|null,
  *   email?: string|null,
- *   provider?: 'PASSWORD'|'GOOGLE'|null,
+ *   provider?: 'PASSWORD'|'GOOGLE'|'GITHUB'|null,
  *   detail?: string|null,
  *   ipAddress?: string|null,
  *   userAgent?: string|null,

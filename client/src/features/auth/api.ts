@@ -154,6 +154,11 @@ export async function unlinkGoogle(): Promise<{ user: AuthUser; message: string 
   return res.data;
 }
 
+export async function unlinkGithub(): Promise<{ user: AuthUser; message: string }> {
+  const res = (await apiClient.post('/auth/github/unlink')) as Env<{ user: AuthUser; message: string }>;
+  return res.data;
+}
+
 // ---- Sessions & security --------------------------------------------------
 
 export async function fetchSessions(): Promise<AuthSession[]> {
@@ -276,6 +281,7 @@ export interface AuthAnalytics {
     unverified: number;
     admins: number;
     googleLinked: number;
+    githubLinked: number;
     newThisWeek: number;
     activeToday: number;
   };
@@ -288,9 +294,28 @@ export async function adminFetchAnalytics(): Promise<AuthAnalytics> {
   return res.data;
 }
 
-/** Browser navigation into the server-side Google authorization-code flow. */
-export function googleAuthUrl(redirectTo: string, rememberMe: boolean): string {
+/**
+ * Entry URL for a server-side OAuth authorization-code flow.
+ *
+ * Navigated to, never fetched: a consent screen has to be a top-level page, and the server
+ * needs to set its handshake cookie on a request the browser will carry back.
+ */
+export function oauthStartUrl(
+  provider: 'google' | 'github',
+  redirectTo: string,
+  rememberMe: boolean
+): string {
   const base = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
   const params = new URLSearchParams({ redirect: redirectTo, remember: String(rememberMe) });
-  return `${base}/auth/google/start?${params.toString()}`;
+  return `${base}/auth/${provider}/start?${params.toString()}`;
+}
+
+/** Browser navigation into the server-side Google authorization-code flow. */
+export function googleAuthUrl(redirectTo: string, rememberMe: boolean): string {
+  return oauthStartUrl('google', redirectTo, rememberMe);
+}
+
+/** Browser navigation into the server-side GitHub authorization-code flow. */
+export function githubAuthUrl(redirectTo: string, rememberMe: boolean): string {
+  return oauthStartUrl('github', redirectTo, rememberMe);
 }

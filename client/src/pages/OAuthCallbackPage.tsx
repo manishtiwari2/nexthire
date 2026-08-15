@@ -8,9 +8,9 @@ import { useNotificationStore } from '../store/useNotificationStore';
 import { Button, Spinner } from '../shared/components/ui';
 
 /**
- * Landing point for the Google authorization-code flow.
+ * Landing point for every OAuth authorization-code flow (Google, GitHub).
  *
- * The server has already verified the ID token, created the session, and set the HTTP-only
+ * The server has already verified the identity, created the session, and set the HTTP-only
  * refresh cookie. It hands the short-lived access token back in the URL *fragment* rather
  * than the query string, because fragments are never sent to servers and so never appear in
  * access logs, proxy logs, or `Referer` headers.
@@ -18,6 +18,13 @@ import { Button, Spinner } from '../shared/components/ui';
  * This page reads the fragment, adopts the token, wipes the fragment from history so it
  * cannot be recovered from the back button, and continues into the app.
  */
+
+/** Display names for the `provider` the server echoes back in the fragment. */
+const PROVIDER_LABELS: Record<string, string> = {
+  GOOGLE: 'Google',
+  GITHUB: 'GitHub',
+};
+
 export const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
   const { adoptTokens, setRedirectAfterLogin } = useAuthStore();
@@ -25,6 +32,14 @@ export const OAuthCallbackPage: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
   const handled = useRef(false);
+
+  // Read in a state initialiser, not the effect: the effect wipes the fragment, and this
+  // has to survive to name the provider in the copy below.
+  const [providerLabel] = useState<string | null>(() => {
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    return PROVIDER_LABELS[fragment.get('provider') || ''] ?? null;
+  });
+  const providerName = providerLabel ?? 'OAuth';
 
   useEffect(() => {
     if (handled.current) return;
@@ -40,7 +55,7 @@ export const OAuthCallbackPage: React.FC = () => {
     window.history.replaceState(null, '', window.location.pathname);
 
     if (!accessToken) {
-      setError('Google sign-in did not return a session. Please try again.');
+      setError(`${providerName} sign-in did not return a session. Please try again.`);
       return;
     }
 
@@ -61,7 +76,7 @@ export const OAuthCallbackPage: React.FC = () => {
         setError('Could not complete sign-in. Please try again.');
       }
     })();
-  }, [adoptTokens, addToast, navigate, setRedirectAfterLogin]);
+  }, [adoptTokens, addToast, navigate, providerName, setRedirectAfterLogin]);
 
   if (error) {
     return (
@@ -74,7 +89,10 @@ export const OAuthCallbackPage: React.FC = () => {
   }
 
   return (
-    <AuthLayout title="Signing you in" subtitle="Completing your Google sign-in…">
+    <AuthLayout
+      title="Signing you in"
+      subtitle={providerLabel ? `Completing your ${providerLabel} sign-in…` : 'Completing your sign-in…'}
+    >
       <div className="flex flex-col items-center gap-4 py-6">
         <Spinner size="lg" />
         <p className="text-sm text-on-surface-variant">Establishing your session…</p>

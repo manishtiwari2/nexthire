@@ -23,6 +23,12 @@ export type Permission =
   | 'analytics:read'
   | 'submission:manage';
 
+/** Credential a session or audit event was established with. Mirrors the server enum. */
+export type AuthProviderName = 'PASSWORD' | 'GOOGLE' | 'GITHUB';
+
+/** The social providers, i.e. everything except password. */
+export type OAuthProviderName = Exclude<AuthProviderName, 'PASSWORD'>;
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -39,6 +45,7 @@ export interface AuthUser {
   /** Whether a password is set — a Google-only account has none yet. */
   hasPassword: boolean;
   googleLinked: boolean;
+  githubLinked: boolean;
   lastLogin: string | null;
   lastActive: string | null;
   createdAt: string;
@@ -53,7 +60,7 @@ export interface AuthUser {
 
 export interface AuthSession {
   id: string;
-  provider: 'PASSWORD' | 'GOOGLE';
+  provider: AuthProviderName;
   rememberMe: boolean;
   browser: string | null;
   os: string | null;
@@ -68,7 +75,7 @@ export interface AuthSession {
 export interface SecurityEvent {
   id: string;
   type: string;
-  provider: 'PASSWORD' | 'GOOGLE' | null;
+  provider: AuthProviderName | null;
   detail: string | null;
   ipAddress: string | null;
   userAgent: string | null;
@@ -79,6 +86,11 @@ export interface AuthServerConfig {
   googleEnabled: boolean;
   googleClientId: string | null;
   googleCodeFlowEnabled: boolean;
+  /**
+   * GitHub is OAuth 2.0 only — there is no browser-side flow and so no client id to
+   * publish. This single flag means "the server can run the GitHub code flow".
+   */
+  githubEnabled: boolean;
   emailVerificationRequired: boolean;
   passwordPolicy: {
     minLength: number;

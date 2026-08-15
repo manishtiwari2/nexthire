@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { AuthDivider, AuthLayout } from '../features/auth/components/AuthLayout';
 import { GoogleSignInButton } from '../features/auth/components/GoogleSignInButton';
+import { GithubSignInButton } from '../features/auth/components/GithubSignInButton';
 import { PasswordField } from '../features/auth/components/PasswordField';
 import { loginSchema, type LoginInput } from '../features/auth/schemas';
 import { resendVerification } from '../features/auth/api';
@@ -202,13 +203,22 @@ export const LoginPage: React.FC = () => {
           </Alert>
         )}
 
-        <GoogleSignInButton
-          config={serverConfig}
-          onCredential={handleGoogleCredential}
-          redirectTo={nextPath}
-          rememberMe={Boolean(rememberMe)}
-          disabled={isSubmitting}
-        />
+        <div className="space-y-3">
+          <GoogleSignInButton
+            config={serverConfig}
+            onCredential={handleGoogleCredential}
+            redirectTo={nextPath}
+            rememberMe={Boolean(rememberMe)}
+            disabled={isSubmitting}
+          />
+
+          <GithubSignInButton
+            config={serverConfig}
+            redirectTo={nextPath}
+            rememberMe={Boolean(rememberMe)}
+            disabled={isSubmitting}
+          />
+        </div>
 
         <AuthDivider />
 

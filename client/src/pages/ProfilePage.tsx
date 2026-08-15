@@ -78,6 +78,14 @@ const EVENT_LABELS: Record<string, string> = {
   ROLE_CHANGED: 'Role changed',
   GOOGLE_LINKED: 'Google account linked',
   GOOGLE_UNLINKED: 'Google account unlinked',
+  GITHUB_LINKED: 'GitHub account linked',
+  GITHUB_UNLINKED: 'GitHub account unlinked',
+};
+
+/** How a session's / event's `provider` is labelled. PASSWORD needs no badge of its own. */
+const PROVIDER_LABELS: Record<string, string> = {
+  GOOGLE: 'Google',
+  GITHUB: 'GitHub',
 };
 
 const DANGEROUS_EVENTS = new Set([
@@ -187,6 +195,11 @@ export const ProfilePage: React.FC = () => {
             {user!.googleLinked && (
               <Badge variant="default">
                 <Link2 className="h-3 w-3" /> Google
+              </Badge>
+            )}
+            {user!.githubLinked && (
+              <Badge variant="default">
+                <Link2 className="h-3 w-3" /> GitHub
               </Badge>
             )}
           </div>
@@ -357,7 +370,8 @@ export const ProfilePage: React.FC = () => {
   // ---- Security ----
   function SecuritySection() {
     const isSettingFirst = !user!.hasPassword;
-    const [unlinking, setUnlinking] = useState(false);
+    /** Which provider's unlink request is in flight, if any. */
+    const [unlinking, setUnlinking] = useState<'GOOGLE' | 'GITHUB' | null>(null);
 
     const {
       register,
@@ -399,16 +413,29 @@ export const ProfilePage: React.FC = () => {
       }
     };
 
-    const handleUnlink = async () => {
-      setUnlinking(true);
+    /**
+     * The sign-in methods this account has, and therefore whether any single one of them can
+     * be removed. Unlinking the last one would lock the user out, so the server refuses it —
+     * this mirrors that rule client-side so the button can explain itself before it is
+     * clicked rather than failing afterwards.
+     */
+    const linkedProviders = [
+      { key: 'GOOGLE' as const, label: 'Google', linked: user!.googleLinked, unlink: authApi.unlinkGoogle },
+      { key: 'GITHUB' as const, label: 'GitHub', linked: user!.githubLinked, unlink: authApi.unlinkGithub },
+    ];
+    const loginMethodCount =
+      (user!.hasPassword ? 1 : 0) + linkedProviders.filter((entry) => entry.linked).length;
+
+    const handleUnlink = async (provider: (typeof linkedProviders)[number]) => {
+      setUnlinking(provider.key);
       try {
-        const result = await authApi.unlinkGoogle();
+        const result = await provider.unlink();
         setUser(result.user);
-        addToast('Google unlinked', result.message, 'success');
+        addToast(`${provider.label} unlinked`, result.message, 'success');
       } catch (error) {
         addToast('Could not unlink', isApiError(error) ? error.message : 'Please try again.', 'error');
       } finally {
-        setUnlinking(false);
+        setUnlinking(null);
       }
     };
 
@@ -418,7 +445,12 @@ export const ProfilePage: React.FC = () => {
           <CardHeader>
             <CardTitle>{isSettingFirst ? 'Set a password' : 'Change password'}</CardTitle>
             <CardDescription>{isSettingFirst
-                  ? 'Your account signs in with Google. Set a password to also sign in with email.'
+                  ? `Your account signs in with ${
+                      linkedProviders
+                        .filter((entry) => entry.linked)
+                        .map((entry) => entry.label)
+                        .join(' and ') || 'a connected provider'
+                    }. Set a password to also sign in with email.`
                   : 'Choose a strong password you have not used elsewhere.'}</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 border-t border-outline-variant p-6" noValidate>
@@ -466,36 +498,47 @@ export const ProfilePage: React.FC = () => {
             <CardTitle>Connected accounts</CardTitle>
             <CardDescription>Sign-in methods linked to this account.</CardDescription>
           </CardHeader>
-          <div className="flex flex-col gap-3 border-t border-outline-variant p-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-on-surface-variant">
-                {user!.googleLinked ? <Link2 className="h-5 w-5" /> : <Link2Off className="h-5 w-5" />}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-on-surface">Google</p>
-                <p className="text-xs text-on-surface-variant">
-                  {user!.googleLinked
-                    ? 'You can sign in with your Google account.'
-                    : 'Not linked. Sign in with Google once to link it to this account.'}
-                </p>
-              </div>
-            </div>
-            {user!.googleLinked && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleUnlink}
-                isLoading={unlinking}
-                // Unlinking a Google-only account would leave no way in; the server refuses
-                // it too, but disabling the button explains why before they click.
-                disabled={unlinking || !user!.hasPassword}
-                title={!user!.hasPassword ? 'Set a password first' : undefined}
-                leftIcon={<Link2Off className="h-4 w-4" />}
-              >
-                Unlink
-              </Button>
-            )}
+          <div className="divide-y divide-outline-variant border-t border-outline-variant">
+            {linkedProviders.map((provider) => {
+              // Removing the account's only remaining way in would lock the user out. The
+              // server refuses it too, but disabling the button explains why before a click.
+              const isLastMethod = provider.linked && loginMethodCount <= 1;
+
+              return (
+                <div
+                  key={provider.key}
+                  className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 text-on-surface-variant">
+                      {provider.linked ? <Link2 className="h-5 w-5" /> : <Link2Off className="h-5 w-5" />}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-on-surface">{provider.label}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        {provider.linked
+                          ? `You can sign in with your ${provider.label} account.`
+                          : `Not linked. Sign in with ${provider.label} once to link it to this account.`}
+                      </p>
+                    </div>
+                  </div>
+                  {provider.linked && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleUnlink(provider)}
+                      isLoading={unlinking === provider.key}
+                      disabled={unlinking !== null || isLastMethod}
+                      title={isLastMethod ? 'Set a password or link another provider first' : undefined}
+                      leftIcon={<Link2Off className="h-4 w-4" />}
+                    >
+                      Unlink
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Card>
 
@@ -584,7 +627,9 @@ export const ProfilePage: React.FC = () => {
                     {session.browser || 'Unknown browser'}
                     <span className="font-normal text-on-surface-muted">on {session.os || 'Unknown OS'}</span>
                     {session.isCurrent && <Badge variant="success">This device</Badge>}
-                    {session.provider === 'GOOGLE' && <Badge variant="default">Google</Badge>}
+                    {session.provider in PROVIDER_LABELS && (
+                      <Badge variant="default">{PROVIDER_LABELS[session.provider]}</Badge>
+                    )}
                     {session.rememberMe && <Badge variant="default">Remembered</Badge>}
                   </p>
                   <p className="text-xs text-on-surface-variant">
@@ -655,7 +700,11 @@ export const ProfilePage: React.FC = () => {
                   }
                 >
                   {EVENT_LABELS[event.type] || event.type}
-                  {event.provider === 'GOOGLE' && <span className="ml-1.5 font-normal text-on-surface-muted">(Google)</span>}
+                  {event.provider && event.provider in PROVIDER_LABELS && (
+                    <span className="ml-1.5 font-normal text-on-surface-muted">
+                      ({PROVIDER_LABELS[event.provider]})
+                    </span>
+                  )}
                 </p>
                 <p className="truncate text-xs text-on-surface-variant">
                   {event.ipAddress || 'Unknown IP'}
