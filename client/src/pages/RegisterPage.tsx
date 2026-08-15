@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { AuthDivider, AuthLayout } from '../features/auth/components/AuthLayout';
 import { GoogleSignInButton } from '../features/auth/components/GoogleSignInButton';
+import { GithubSignInButton } from '../features/auth/components/GithubSignInButton';
 import { PasswordField } from '../features/auth/components/PasswordField';
 import { PasswordStrengthMeter } from '../features/auth/components/PasswordStrengthMeter';
 import { registerSchema, type RegisterInput } from '../features/auth/schemas';
@@ -206,12 +207,20 @@ export const RegisterPage: React.FC = () => {
       <div className="space-y-5">
         {formError && <Alert variant="danger">{formError}</Alert>}
 
-        <GoogleSignInButton
-          config={serverConfig}
-          onCredential={handleGoogleCredential}
-          disabled={isSubmitting}
-          label="Sign up with Google"
-        />
+        <div className="space-y-3">
+          <GoogleSignInButton
+            config={serverConfig}
+            onCredential={handleGoogleCredential}
+            disabled={isSubmitting}
+            label="Sign up with Google"
+          />
+
+          <GithubSignInButton
+            config={serverConfig}
+            disabled={isSubmitting}
+            label="Sign up with GitHub"
+          />
+        </div>
 
         <AuthDivider label="Or sign up with email" />
 

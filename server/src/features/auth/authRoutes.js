@@ -49,6 +49,16 @@ const registerLimiter = rateLimit({
   message: 'Too many accounts created from this network. Please try again later.',
 });
 
+/**
+ * Signup traffic that never reaches account creation (a mistyped email, a password that
+ * fails the policy) must not consume the hourly signup budget — otherwise a single user
+ * fumbling the form is locked out for an hour, and a whole office behind one NAT with them.
+ *
+ * So the limiter runs *after* validation: only well-formed attempts count. Volume is still
+ * bounded, because a malformed request costs nothing but a schema parse.
+ */
+const registerGuard = [validate(registerSchema), registerLimiter];
+
 // Tight: each request sends an email, so this is abuse-prevention for our mail reputation
 // as much as for the user's inbox.
 const emailLimiter = rateLimit({
@@ -83,6 +93,16 @@ const googleLimiter = rateLimit({
   message: 'Too many Google sign-in attempts. Please try again shortly.',
 });
 
+// Its own bucket, so exhausting one provider's allowance does not take the other down with
+// it — a user who cannot get past Google should still be able to try GitHub.
+const githubLimiter = rateLimit({
+  name: 'auth:github',
+  limit: 20,
+  windowSec: 300,
+  keyGenerator: ipKey,
+  message: 'Too many GitHub sign-in attempts. Please try again shortly.',
+});
+
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -90,7 +110,7 @@ const googleLimiter = rateLimit({
 /** What the sign-in page needs to know (is Google enabled, password policy, …). */
 router.get('/config', controller.getAuthConfig);
 
-router.post('/register', registerLimiter, validate(registerSchema), controller.register);
+router.post('/register', ...registerGuard, controller.register);
 router.post('/login', loginLimiter, validate(loginSchema), controller.login);
 
 router.post('/verify-email', resetLimiter, validate(verifyEmailSchema), controller.verifyEmail);
@@ -104,6 +124,14 @@ router.post('/google', googleLimiter, validate(googleCredentialSchema), controll
 // Google — authorization-code flow. Browser navigations, not XHR.
 router.get('/google/start', googleLimiter, controller.googleStart);
 router.get('/google/callback', controller.googleCallback);
+
+/**
+ * GitHub — authorization-code flow only. GitHub is not an OpenID Connect provider, so there
+ * is no ID token and therefore no `POST /auth/github` counterpart to `POST /auth/google`:
+ * the code exchange and the profile read both happen server-side.
+ */
+router.get('/github/start', githubLimiter, controller.githubStart);
+router.get('/github/callback', controller.githubCallback);
 
 /**
  * Cookie-authenticated. CSRF-protected because the browser attaches the refresh cookie
@@ -138,6 +166,7 @@ router.post(
   controller.changePassword
 );
 router.post('/google/unlink', requireAuthenticated, controller.unlinkGoogle);
+router.post('/github/unlink', requireAuthenticated, controller.unlinkGithub);
 
 // ---------------------------------------------------------------------------
 // Admin — user management

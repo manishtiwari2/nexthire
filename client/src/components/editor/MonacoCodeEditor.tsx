@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
+// Side-effect import: points Monaco at our own bundle (not a CDN) and registers only the
+// three languages the judge runs. Must be imported before the editor mounts.
+import './monacoSetup';
 import { useEditorStore, SupportedLanguage, JudgePhase } from '../../store/useEditorStore';
 import {
   Play, RotateCcw, CheckCircle, AlertCircle, Clock, Cpu, Send, Loader2,
@@ -104,7 +107,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // Shared run/submit flow. Reads the freshest code/language from the store (not a stale
   // closure) so keyboard-shortcut invocations always judge what's on screen. The verdict comes
   // entirely from the real judge — via Socket.IO events with a polling fallback — never faked.
-  const runJudge = async (endpoint: string) => {
+  const runJudge = async (endpoint: string, mode: 'run' | 'submit' = 'submit') => {
     if (locked) {
       addToast('Submissions Closed', disabledReason || 'This session is no longer accepting code.', 'warning');
       return;
@@ -119,7 +122,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     setResult(null);
     setPhase('QUEUED');
     try {
-      const res: any = await apiClient.post(endpoint, { questionId, code: freshCode, language: freshLang });
+      const res: any = await apiClient.post(endpoint, { questionId, code: freshCode, language: freshLang, mode });
       const submissionId = res.data.submissionId;
       const verdict = await awaitVerdict(submissionId, (p) => setPhase(p));
       setResult(verdict);
@@ -135,9 +138,13 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     }
   };
 
-  const handleRunCode = () => runJudge(`/questions/${questionId}/execute`);
+  // Run = sample tests only, no submission recorded. Submit = every test, counts for real.
+  const handleRunCode = () => runJudge(`/questions/${questionId}/execute`, 'run');
   const handleSubmitCode = async () => {
-    await runJudge(contestId ? `/contests/${contestId}/submit` : `/questions/${questionId}/execute`);
+    await runJudge(
+      contestId ? `/contests/${contestId}/submit` : `/questions/${questionId}/execute`,
+      'submit'
+    );
     if (onSubmitted) onSubmitted();
   };
 

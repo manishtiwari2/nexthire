@@ -12,7 +12,45 @@ const openApiSpec = {
     '/auth/google': {
       post: {
         summary: 'Google OAuth / Authentication',
+        description: 'Google Identity Services flow: POST the ID token as `credential`. Verified server-side against Google\'s public keys.',
         responses: { 200: { description: 'Returns JWT Access Token' } }
+      }
+    },
+    '/auth/github/start': {
+      get: {
+        summary: 'Begin GitHub OAuth (authorization-code flow)',
+        description: 'A browser navigation, not an XHR. Sets a short-lived HTTP-only state cookie and 302s to GitHub\'s consent screen. GitHub is OAuth 2.0 only (no OpenID Connect), so there is no ID-token counterpart to POST /auth/google.',
+        parameters: [
+          { name: 'redirect', in: 'query', required: false, description: 'Relative SPA path to land on afterwards. Non-relative values are ignored.' },
+          { name: 'remember', in: 'query', required: false, description: '"true" for the long ("Remember me") refresh lifetime.' }
+        ],
+        responses: {
+          302: { description: 'Redirect to GitHub' },
+          503: { description: 'GITHUB_NOT_CONFIGURED — GITHUB_CLIENT_ID/SECRET are unset' }
+        }
+      }
+    },
+    '/auth/github/callback': {
+      get: {
+        summary: 'GitHub OAuth callback',
+        description: 'Validates `state` against the handshake cookie, exchanges the code, and reads the profile from the GitHub API. Only an email GitHub reports as verified is accepted. Always ends in a redirect: /auth/callback#access_token=… on success, /login?error=… otherwise.',
+        parameters: [
+          { name: 'code', in: 'query', required: false },
+          { name: 'state', in: 'query', required: true },
+          { name: 'error', in: 'query', required: false, description: 'Present when the user cancelled on GitHub.' }
+        ],
+        responses: { 302: { description: 'Redirect into the SPA (success or error)' } }
+      }
+    },
+    '/auth/github/unlink': {
+      post: {
+        summary: 'Unlink GitHub from the signed-in account',
+        description: 'Refused with LAST_LOGIN_METHOD when GitHub is the account\'s only remaining sign-in method.',
+        responses: {
+          200: { description: 'Updated user DTO' },
+          400: { description: 'NOT_LINKED' },
+          409: { description: 'LAST_LOGIN_METHOD' }
+        }
       }
     },
     '/questions': {

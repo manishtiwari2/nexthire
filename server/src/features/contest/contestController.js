@@ -1,6 +1,54 @@
+const crypto = require('crypto');
 const { prisma } = require('../../shared/db');
 const { dispatchJudgeJob } = require('../judge/judgeDispatch');
 const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
+
+/**
+ * The ONLY user fields a contest surface may expose.
+ *
+ * Contest payloads are read by every other participant (and the contest list is readable
+ * anonymously), so a bare `user: true` here would ship the whole User row — including
+ * `passwordHash`, `mobile`, `tokenVersion` and lockout state — to anyone who can see the
+ * contest. Always spread this instead of `include: { user: true }`.
+ *
+ * `email` is deliberately excluded: a leaderboard is public-facing, and an address there is
+ * both PII and a user-enumeration oracle. Display identity is name + avatar.
+ */
+const PUBLIC_USER_SELECT = { id: true, name: true, avatarUrl: true };
+
+/**
+ * Question fields safe to include in a *contest listing*.
+ *
+ * The full question object carries `description` and `constraints`; including those in the
+ * list would hand out every problem statement of an UPCOMING contest before it starts.
+ * The solve page fetches the full statement through /questions/:id once the contest is live.
+ */
+const CONTEST_LIST_QUESTION_SELECT = {
+  id: true,
+  title: true,
+  slug: true,
+  difficulty: true,
+  timeLimitMs: true,
+  memoryLimitMb: true,
+};
+
+/**
+ * Unguessable join code. `Math.random()` is not a CSPRNG — an invite code is a join secret,
+ * and a predictable one lets an outsider walk into a private assessment.
+ *
+ * Crockford-style alphabet (no I/L/O/U/0/1) so a code read aloud or typed from a screenshot
+ * cannot be transcribed into a different valid code. 8 chars over 32 symbols = 2^40.
+ */
+/** Upper bound on a single submission's source (mirrors the practice endpoint). */
+const MAX_CODE_LENGTH = 200_000;
+
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+function generateInviteCode() {
+  const bytes = crypto.randomBytes(8);
+  let out = '';
+  for (let i = 0; i < 8; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return `DSA-${out}`;
+}
 
 // Helper to update contest status based on time
 async function updateContestStatuses() {
@@ -21,8 +69,9 @@ async function getContests(req, res) {
 
     const contests = await prisma.contest.findMany({
       include: {
-        host: { select: { id: true, name: true, email: true } },
-        questions: { include: { question: true } },
+        host: { select: PUBLIC_USER_SELECT },
+        // Titles/difficulty only — never the statements of a contest that has not started.
+        questions: { select: { id: true, orderIndex: true, points: true, question: { select: CONTEST_LIST_QUESTION_SELECT } } },
         _count: { select: { participants: true } }
       },
       orderBy: { startTime: 'desc' }
@@ -41,9 +90,10 @@ async function getContestById(req, res) {
     const contest = await prisma.contest.findUnique({
       where: { id: req.params.id },
       include: {
-        host: { select: { id: true, name: true, email: true } },
+        host: { select: PUBLIC_USER_SELECT },
         questions: { include: { question: true }, orderBy: { orderIndex: 'asc' } },
-        participants: { include: { user: true }, orderBy: [{ score: 'desc' }, { penalty: 'asc' }] },
+        // Never `user: true` here — see PUBLIC_USER_SELECT.
+        participants: { include: { user: { select: PUBLIC_USER_SELECT } }, orderBy: [{ score: 'desc' }, { penalty: 'asc' }] },
         invites: true
       }
     });
@@ -57,6 +107,22 @@ async function getContestById(req, res) {
     const isHostOrAdmin = req.user && (contest.hostId === req.user.id || req.user.role === 'ADMIN');
     if (!isHostOrAdmin) {
       contest.invites = [];
+
+      // Contest integrity: the problem statements of a contest that has not started yet are
+      // not readable by entrants. They become available the moment it goes LIVE.
+      if (contest.status === 'UPCOMING' || new Date() < contest.startTime) {
+        contest.questions = contest.questions.map((cq) => ({
+          ...cq,
+          question: {
+            id: cq.question.id,
+            title: cq.question.title,
+            slug: cq.question.slug,
+            difficulty: cq.question.difficulty,
+            timeLimitMs: cq.question.timeLimitMs,
+            memoryLimitMb: cq.question.memoryLimitMb,
+          },
+        }));
+      }
     }
 
     res.json({ success: true, data: contest });
@@ -75,7 +141,7 @@ async function createContest(req, res) {
 
     const start = startTime ? new Date(startTime) : new Date();
     const end = endTime ? new Date(endTime) : new Date(Date.now() + 7200000);
-    const generatedCode = `DSA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const generatedCode = generateInviteCode();
 
     const contest = await prisma.contest.create({
       data: {
@@ -132,7 +198,35 @@ async function joinByCode(req, res) {
       return res.status(404).json({ success: false, error: 'Invalid assessment join code' });
     }
 
+    // An invite is a bounded credential. These are the same rules `joinContest` applies —
+    // without them the code path clients actually use (join-by-code) would let anyone in
+    // after the contest ended, past the expiry, and past the usage cap.
+    await updateContestStatuses();
+    const contest = invite.contest;
+    if (contest && contest.status === 'ENDED') {
+      return res.status(400).json({ success: false, error: 'Cannot join an ended contest' });
+    }
+    if (invite.expiresAt && new Date() >= invite.expiresAt) {
+      return res.status(400).json({ success: false, error: 'This join code has expired' });
+    }
+
     const contestId = invite.contestId;
+    // A "use" is a new entrant, not a request. Someone already in the contest re-entering
+    // after a refresh or a dropped connection must not be blocked by — or consume — the cap,
+    // so the usage check is scoped to genuinely new participants.
+    const alreadyJoined = await prisma.contestParticipant.findUnique({
+      where: { contestId_userId: { contestId, userId: req.user.id } }
+    });
+    if (!alreadyJoined) {
+      if (invite.maxUses && invite.usedCount >= invite.maxUses) {
+        return res.status(400).json({ success: false, error: 'Invite code usage limit reached' });
+      }
+      await prisma.contestInvite.update({
+        where: { id: invite.id },
+        data: { usedCount: { increment: 1 } }
+      });
+    }
+
     const participant = await prisma.contestParticipant.upsert({
       where: { contestId_userId: { contestId, userId: req.user.id } },
       update: {
@@ -174,13 +268,22 @@ async function joinContest(req, res) {
       if (!invite || invite.contestId !== contestId) {
         return res.status(400).json({ success: false, error: 'Invalid contest invite code' });
       }
-      if (invite.maxUses && invite.usedCount >= invite.maxUses) {
-        return res.status(400).json({ success: false, error: 'Invite code usage limit reached' });
+      if (invite.expiresAt && new Date() >= invite.expiresAt) {
+        return res.status(400).json({ success: false, error: 'This join code has expired' });
       }
-      await prisma.contestInvite.update({
-        where: { id: invite.id },
-        data: { usedCount: { increment: 1 } }
+      // Re-joining neither consumes nor is blocked by the cap (see joinByCode).
+      const rejoining = await prisma.contestParticipant.findUnique({
+        where: { contestId_userId: { contestId, userId: req.user.id } }
       });
+      if (!rejoining) {
+        if (invite.maxUses && invite.usedCount >= invite.maxUses) {
+          return res.status(400).json({ success: false, error: 'Invite code usage limit reached' });
+        }
+        await prisma.contestInvite.update({
+          where: { id: invite.id },
+          data: { usedCount: { increment: 1 } }
+        });
+      }
     }
 
     const participant = await prisma.contestParticipant.upsert({
@@ -223,7 +326,8 @@ async function getContestLeaderboard(req, res) {
     const contestId = req.params.id;
     const participants = await prisma.contestParticipant.findMany({
       where: { contestId, isDisqualified: false },
-      include: { user: { select: { id: true, name: true, avatarUrl: true, email: true } } },
+      // A leaderboard is public-facing: name + avatar only, never email (PII + enumeration).
+      include: { user: { select: PUBLIC_USER_SELECT } },
       orderBy: [{ score: 'desc' }, { penalty: 'asc' }]
     });
 
@@ -243,7 +347,7 @@ async function createContestInvite(req, res) {
   try {
     const contestId = req.params.id;
     const { maxUses, expiresAt } = req.body;
-    const code = `DSA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const code = generateInviteCode();
 
     const invite = await prisma.contestInvite.create({
       data: {
@@ -287,6 +391,19 @@ async function submitContestCode(req, res) {
       return res.status(400).json({
         success: false,
         error: `Language "${normalizedLanguage}" is not supported. Supported: ${SUPPORTED_LANGUAGES.join(', ')}`
+      });
+    }
+
+    // `code` goes straight into a String column; a non-string would reach Prisma and throw,
+    // surfacing as a 500. Same guard as the practice endpoint.
+    if (typeof code !== 'string') {
+      return res.status(400).json({ success: false, error: 'Field "code" must be a string.', code: 'INVALID_CODE' });
+    }
+    if (code.length > MAX_CODE_LENGTH) {
+      return res.status(413).json({
+        success: false,
+        error: `Submission is too large (${code.length} characters). The limit is ${MAX_CODE_LENGTH}.`,
+        code: 'CODE_TOO_LARGE',
       });
     }
 

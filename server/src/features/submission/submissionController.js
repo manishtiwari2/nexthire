@@ -59,6 +59,9 @@ async function listSubmissions(req, res) {
     if (req.query.questionId) where.questionId = String(req.query.questionId);
     if (req.query.contestId) where.contestId = String(req.query.contestId);
     where.userId = isAdmin && req.query.userId ? String(req.query.userId) : req.user.id;
+    // Trial runs ("Run") are scratch work, not attempts — keep them out of history unless
+    // explicitly asked for. Fetching a run directly by id still works.
+    if (req.query.includeRuns !== 'true') where.isTrialRun = false;
 
     const submissions = await prisma.submission.findMany({
       where,

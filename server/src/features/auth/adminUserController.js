@@ -370,22 +370,44 @@ async function getAuthAnalytics(_req, res, next) {
     const dayAgo = new Date(now.getTime() - 86_400_000);
     const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
 
-    const [total, active, disabled, unverified, admins, googleLinked, newThisWeek, activeToday, liveSessions, failedToday] =
-      await Promise.all([
-        prisma.user.count(),
-        prisma.user.count({ where: { isActive: true } }),
-        prisma.user.count({ where: { isActive: false } }),
-        prisma.user.count({ where: { emailVerified: false } }),
-        prisma.user.count({ where: { role: ROLES.ADMIN } }),
-        prisma.user.count({ where: { googleId: { not: null } } }),
-        prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
-        prisma.user.count({ where: { lastActive: { gte: dayAgo } } }),
-        prisma.session.count({ where: { revokedAt: null, expiresAt: { gt: now } } }),
-        prisma.authEvent.count({ where: { type: 'LOGIN_FAILED', createdAt: { gte: dayAgo } } }),
-      ]);
+    const [
+      total,
+      active,
+      disabled,
+      unverified,
+      admins,
+      googleLinked,
+      githubLinked,
+      newThisWeek,
+      activeToday,
+      liveSessions,
+      failedToday,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.user.count({ where: { isActive: false } }),
+      prisma.user.count({ where: { emailVerified: false } }),
+      prisma.user.count({ where: { role: ROLES.ADMIN } }),
+      prisma.user.count({ where: { googleId: { not: null } } }),
+      prisma.user.count({ where: { githubId: { not: null } } }),
+      prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
+      prisma.user.count({ where: { lastActive: { gte: dayAgo } } }),
+      prisma.session.count({ where: { revokedAt: null, expiresAt: { gt: now } } }),
+      prisma.authEvent.count({ where: { type: 'LOGIN_FAILED', createdAt: { gte: dayAgo } } }),
+    ]);
 
     return ok(res, {
-      users: { total, active, disabled, unverified, admins, googleLinked, newThisWeek, activeToday },
+      users: {
+        total,
+        active,
+        disabled,
+        unverified,
+        admins,
+        googleLinked,
+        githubLinked,
+        newThisWeek,
+        activeToday,
+      },
       sessions: { live: liveSessions },
       security: { failedLoginsLast24h: failedToday },
     });

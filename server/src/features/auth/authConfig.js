@@ -115,6 +115,39 @@ const authConfig = {
     },
   },
 
+  // ---- GitHub OAuth ------------------------------------------------------------
+  /**
+   * GitHub is OAuth 2.0 only — not OpenID Connect. There is no ID token to verify, so the
+   * authorization-code flow is the *only* option: the server exchanges the code for an
+   * access token and then reads the profile from the GitHub API itself. That also means
+   * there is no browser-side equivalent of Google Identity Services here, and no `nonce`
+   * (nothing is signed for us to replay-protect) — `state` carries the whole CSRF burden.
+   */
+  github: {
+    clientId: process.env.GITHUB_CLIENT_ID || '',
+    clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+    /** Must exactly match the "Authorization callback URL" of the GitHub OAuth app. */
+    redirectUri:
+      process.env.GITHUB_REDIRECT_URI ||
+      `http://localhost:${process.env.PORT || 5000}/api/v1/auth/github/callback`,
+    /**
+     * Scopes. `read:user` is enough for the profile; `user:email` is what makes the
+     * *verified* address readable even when the user keeps it private. Both are read-only
+     * — nothing here can touch a repository.
+     */
+    scope: process.env.GITHUB_SCOPE || 'read:user user:email',
+    /**
+     * Host overrides for GitHub Enterprise Server, where OAuth lives on the appliance
+     * (`https://ghe.example.com`) and the API under `/api/v3`. Defaults are github.com.
+     */
+    oauthBaseUrl: (process.env.GITHUB_OAUTH_BASE_URL || 'https://github.com').replace(/\/$/, ''),
+    apiBaseUrl: (process.env.GITHUB_API_BASE_URL || 'https://api.github.com').replace(/\/$/, ''),
+    /** GitHub needs both halves before any part of the flow can work. */
+    get isConfigured() {
+      return Boolean(this.clientId && this.clientSecret);
+    },
+  },
+
   // ---- Email -------------------------------------------------------------------
   mail: {
     /** console | smtp | resend | sendgrid */
@@ -176,6 +209,12 @@ function assertProductionConfig() {
   if (authConfig.accessTokenSecret.length < 32) {
     problems.push('JWT access secret must be at least 32 characters');
   }
+  // The admin allow-list falls back to the maintainers' own addresses so a local checkout
+  // has a working admin. Shipping that fallback to a real deployment would hand ADMIN to
+  // whoever controls those inboxes, so production must name its own admins.
+  if (!process.env.ADMIN_EMAILS) {
+    problems.push('ADMIN_EMAILS must be set explicitly in production (the built-in default is for local development only)');
+  }
   if (!authConfig.cookies.secure) {
     problems.push('COOKIE_SECURE must not be disabled in production');
   }
@@ -187,6 +226,18 @@ function assertProductionConfig() {
   }
   if (['resend', 'sendgrid'].includes(authConfig.mail.provider) && !authConfig.mail.apiKey) {
     problems.push(`MAIL_API_KEY is required when MAIL_PROVIDER=${authConfig.mail.provider}`);
+  }
+  // DISABLE_RATE_LIMIT is a test-suite escape hatch. Leaking it into a deployed environment
+  // would silently remove every brute-force and abuse control, so refuse to boot with it.
+  if (process.env.DISABLE_RATE_LIMIT === '1') {
+    problems.push('DISABLE_RATE_LIMIT=1 is a test-only flag and must not be set in production');
+  }
+  // The judge sandbox is what stands between untrusted user code and the host.
+  if (process.env.JUDGE_UNSAFE_LOCAL === '1') {
+    problems.push('JUDGE_UNSAFE_LOCAL=1 runs submitted code with no sandbox and must not be set in production');
+  }
+  if (process.env.AUTH_VERBOSE_LOGIN_ERRORS === 'true') {
+    problems.push('AUTH_VERBOSE_LOGIN_ERRORS must be off in production — it is a user-enumeration oracle');
   }
 
   if (problems.length) {

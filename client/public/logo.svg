@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="NextHire">
+  <title>NextHire</title>
+  <!--
+    NextHire mark.
+
+    An "N" drawn as a single continuous path, so it reads as a traversal through a graph
+    rather than a letterform sitting still: two stems joined by one edge. The violet node
+    caps the final vertex — the "next" the name is about.
+
+    Colours are the app's own tokens (client/src/index.css): primary #6366f1 with its
+    neighbours #818cf8 / #4f46e5, and tertiary #a78bfa for the node.
+  -->
+  <defs>
+    <linearGradient id="nhTile" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset=".55" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="15" fill="url(#nhTile)"/>
+
+  <!-- Round joins keep the vertices legible once the mark is scaled to a 16px favicon. -->
+  <path d="M21 45.5V19.5L43 44.5V23"
+        fill="none" stroke="#fff" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="43" cy="18.5" r="5.5" fill="#a78bfa"/>
+</svg>

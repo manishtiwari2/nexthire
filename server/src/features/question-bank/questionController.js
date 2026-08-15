@@ -4,6 +4,17 @@ const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/
 const { progressMapFor, toProgressDto } = require('../library/libraryHelpers');
 
 const SOURCE_PLATFORMS = ['LEETCODE', 'GEEKSFORGEEKS', 'HACKERRANK', 'CODEFORCES', 'CODECHEF', 'ATCODER', 'INTERVIEWBIT', 'CUSTOM'];
+// Mirror the Prisma enums. Browse filters are validated against these before they reach the
+// database — an unrecognised value is a 400, not a Prisma exception surfacing as a 500.
+const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'];
+const FREQUENCY_BANDS = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+
+/**
+ * Upper bound on a single submission's source. Express already caps the JSON body at 1 MB,
+ * so this mainly turns an oversized payload into a clear 413 instead of a parser error, and
+ * keeps a pathological blob out of the database and the judge workdir.
+ */
+const MAX_CODE_LENGTH = 200_000;
 
 // Return `value` upper-cased if it is one of `allowed`, otherwise null (so callers can default).
 function normalizeEnum(value, allowed) {
@@ -101,12 +112,28 @@ async function getQuestions(req, res) {
         { description: { contains: String(search), mode: 'insensitive' } }
       ];
     }
-    if (difficulty) where.difficulty = String(difficulty).toUpperCase();
+    // Enum-backed filters must be validated before they reach Prisma. An unknown value is a
+    // client mistake (or a probe), and passing it through makes Prisma throw — which surfaced
+    // as a 500 on any bad ?difficulty=/?source=/?frequency= value.
+    const enumFilter = normalizeEnum;
+    if (difficulty) {
+      const v = enumFilter(difficulty, DIFFICULTIES);
+      if (!v) return res.status(400).json({ success: false, error: `Unknown difficulty "${difficulty}". Expected one of: ${DIFFICULTIES.join(', ')}`, code: 'INVALID_FILTER' });
+      where.difficulty = v;
+    }
+    if (source) {
+      const v = enumFilter(source, SOURCE_PLATFORMS);
+      if (!v) return res.status(400).json({ success: false, error: `Unknown source "${source}". Expected one of: ${SOURCE_PLATFORMS.join(', ')}`, code: 'INVALID_FILTER' });
+      where.sourcePlatform = v;
+    }
+    if (frequency) {
+      const v = enumFilter(frequency, FREQUENCY_BANDS);
+      if (!v) return res.status(400).json({ success: false, error: `Unknown frequency "${frequency}". Expected one of: ${FREQUENCY_BANDS.join(', ')}`, code: 'INVALID_FILTER' });
+      where.frequencyBand = v;
+    }
     if (topicId) where.topicId = String(topicId);
     if (topicSlug) where.topic = { slug: String(topicSlug) };
     if (tagId) where.questionTags = { some: { tagId: String(tagId) } };
-    if (source) where.sourcePlatform = String(source).toUpperCase();
-    if (frequency) where.frequencyBand = String(frequency).toUpperCase();
     if (subtopic) where.subtopics = { has: String(subtopic) };
     if (companySlug) {
       where.companyTags = { some: { companyTag: { name: { equals: companyName(String(companySlug)), mode: 'insensitive' } } } };
@@ -375,9 +402,31 @@ async function deleteQuestion(req, res) {
 
 async function submitCodeExecution(req, res) {
   try {
-    const { code, language, context, contestId, interviewId } = req.body;
+    const { code, language, context, contestId, interviewId, mode } = req.body;
     const questionId = req.params.id;
     const normalizedLanguage = (language || 'PYTHON').toUpperCase();
+
+    // "Run" tries the visible samples; "Submit" is the real attempt against every test.
+    // Defaults to submit so existing callers keep their behaviour.
+    const isTrialRun = String(mode || '').toLowerCase() === 'run';
+
+    // `code` is written straight into a String column. Anything that is not a string (null,
+    // an array, an object) used to reach Prisma and throw, surfacing as a 500 with a raw
+    // driver message. Reject it here as the client error it is.
+    if (typeof code !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Field "code" must be a string.',
+        code: 'INVALID_CODE',
+      });
+    }
+    if (code.length > MAX_CODE_LENGTH) {
+      return res.status(413).json({
+        success: false,
+        error: `Submission is too large (${code.length} characters). The limit is ${MAX_CODE_LENGTH}.`,
+        code: 'CODE_TOO_LARGE',
+      });
+    }
 
     const question = await prisma.question.findUnique({ where: { id: questionId } });
     if (!question) {
@@ -401,7 +450,8 @@ async function submitCodeExecution(req, res) {
         interviewId: interviewId || null,
         code,
         language: normalizedLanguage,
-        status: 'PENDING'
+        status: 'PENDING',
+        isTrialRun
       }
     });
 
@@ -419,7 +469,8 @@ async function submitCodeExecution(req, res) {
       data: {
         submissionId: submission.id,
         jobId,
-        status: 'QUEUED'
+        status: 'QUEUED',
+        mode: isTrialRun ? 'run' : 'submit'
       }
     });
   } catch (err) {
@@ -455,7 +506,9 @@ async function getUserSubmissionsForQuestion(req, res) {
     const submissions = await prisma.submission.findMany({
       where: {
         questionId,
-        userId: req.user.id
+        userId: req.user.id,
+        // "Run" results are scratch work — the History tab shows real submissions only.
+        isTrialRun: false
       },
       include: { executions: { take: 1, orderBy: { judgedAt: 'desc' } } },
       orderBy: { createdAt: 'desc' },

@@ -10,6 +10,13 @@ const { toUserDto } = require('./userDto');
 const { track, listUserEvents } = require('./auditService');
 const mailer = require('./mailService');
 const google = require('./googleService');
+const github = require('./githubService');
+const {
+  issueOAuthState,
+  clearOAuthState,
+  consumeOAuthState,
+  safeRedirectPath,
+} = require('./oauthState');
 const rateLimiter = require('../../shared/rateLimit');
 
 /**
@@ -98,9 +105,25 @@ async function issueSession(req, res, user, { provider, rememberMe }) {
   };
 }
 
-/** Ensure a Profile row exists — several features assume one. Safe to call repeatedly. */
-async function ensureProfile(userId) {
-  await prisma.profile.upsert({ where: { userId }, create: { userId }, update: {} });
+/**
+ * Ensure a Profile row exists — several features assume one. Safe to call repeatedly.
+ *
+ * `fillIfEmpty` sets fields only when they are currently null, so a value the user typed
+ * themselves is never overwritten by one an OAuth provider happens to know.
+ */
+async function ensureProfile(userId, fillIfEmpty = {}) {
+  const profile = await prisma.profile.upsert({
+    where: { userId },
+    create: { userId, ...fillIfEmpty },
+    update: {},
+  });
+
+  const missing = Object.fromEntries(
+    Object.entries(fillIfEmpty).filter(([key, value]) => value && !profile[key])
+  );
+  if (Object.keys(missing).length) {
+    await prisma.profile.update({ where: { userId }, data: missing });
+  }
 }
 
 function isUniqueViolation(err, field) {
@@ -467,42 +490,88 @@ async function login(req, res, next) {
 }
 
 // ===========================================================================
-// Google OAuth
+// OAuth (Google, GitHub)
 // ===========================================================================
 
 /**
- * Find-or-create the local account behind a verified Google profile.
+ * Everything that differs between the OAuth providers, in one table.
  *
- * Linking rule: if an account already exists with the same email, the Google identity is
- * attached to it. That is safe *only* because `verifyIdToken` rejects tokens whose
- * `email_verified` is not true — otherwise anyone could create a Google account claiming
- * someone else's address and inherit their NextHire account.
+ * The find-or-create-or-link logic below is the security-critical part of social sign-in,
+ * so it exists exactly once and is driven by this registry. Adding a provider must not mean
+ * re-deriving the linking rules — a second copy is a second chance to get them wrong.
  */
-async function upsertGoogleUser(profile, context) {
-  const byGoogleId = await prisma.user.findUnique({ where: { googleId: profile.googleId } });
-  const existing = byGoogleId || (await prisma.user.findUnique({ where: { email: profile.email } }));
+const OAUTH_PROVIDERS = {
+  GOOGLE: {
+    provider: 'GOOGLE',
+    label: 'Google',
+    /** Column on User holding the provider's stable account id. */
+    idColumn: 'googleId',
+    linkedEvent: 'GOOGLE_LINKED',
+    unlinkedEvent: 'GOOGLE_UNLINKED',
+  },
+  GITHUB: {
+    provider: 'GITHUB',
+    label: 'GitHub',
+    idColumn: 'githubId',
+    linkedEvent: 'GITHUB_LINKED',
+    unlinkedEvent: 'GITHUB_UNLINKED',
+    /**
+     * GitHub tells us the user's profile URL, which is exactly what Profile.githubUrl is
+     * for. Filled in only when the user has not set one.
+     */
+    profileFields: (profile) => (profile.profileUrl ? { githubUrl: profile.profileUrl } : {}),
+  },
+};
+
+/**
+ * Find-or-create the local account behind a *verified* OAuth profile.
+ *
+ * Linking rule: if an account already exists with the same email address, the provider
+ * identity is attached to it rather than creating a second account. That is safe only
+ * because every caller has already established that the provider verified the address —
+ * `verifyIdToken` rejects a Google token whose `email_verified` is not true, and
+ * `fetchProfile` only ever returns a GitHub address marked `verified: true`. Without that
+ * guarantee this function is an account-takeover primitive: anyone could attach their own
+ * provider account to someone else's address and inherit their NextHire account.
+ *
+ * @param {'GOOGLE'|'GITHUB'} providerKey
+ * @param {{ email: string, name: string|null, picture: string|null }} profile
+ *        Plus the provider's id under the registry's `idColumn`.
+ */
+async function upsertOAuthUser(providerKey, profile, context) {
+  const spec = OAUTH_PROVIDERS[providerKey];
+  const { idColumn } = spec;
+  const providerUserId = profile[idColumn];
+  const profileFields = spec.profileFields ? spec.profileFields(profile) : {};
+
+  if (!providerUserId) {
+    throw new Error(`${spec.label} profile is missing its account id`);
+  }
+
+  const byProviderId = await prisma.user.findUnique({ where: { [idColumn]: providerUserId } });
+  const existing = byProviderId || (await prisma.user.findUnique({ where: { email: profile.email } }));
 
   if (!existing) {
     const created = await prisma.user.create({
       data: {
         email: profile.email,
         name: profile.name || profile.email.split('@')[0],
-        googleId: profile.googleId,
+        [idColumn]: providerUserId,
         avatarUrl: profile.picture || defaultAvatar(profile.email),
         role: roleForEmail(profile.email),
-        // Google has verified the address; there is nothing left for us to verify.
+        // The provider has verified the address; there is nothing left for us to verify.
         emailVerified: true,
         emailVerifiedAt: new Date(),
         isVerified: true,
       },
     });
-    await ensureProfile(created.id);
+    await ensureProfile(created.id, profileFields);
     track({
       type: 'REGISTER',
       userId: created.id,
       email: created.email,
-      provider: 'GOOGLE',
-      detail: 'created_via_google',
+      provider: spec.provider,
+      detail: `created_via_${spec.provider.toLowerCase()}`,
       ...context,
     });
     return { user: created, linked: false, created: true };
@@ -514,14 +583,17 @@ async function upsertGoogleUser(profile, context) {
     throw error;
   }
 
-  const linking = !existing.googleId;
+  const linking = !existing[idColumn];
   const now = new Date();
 
   const updated = await prisma.user.update({
     where: { id: existing.id },
     data: {
-      googleId: existing.googleId || profile.googleId,
-      // Signing in with a verified Google identity settles email verification for an
+      // An already-linked account keeps the id it was linked with. Signing in from a second
+      // provider account that shares the verified address is allowed — the mailbox proves
+      // it is the same person — but it must not silently re-point the link.
+      [idColumn]: existing[idColumn] || providerUserId,
+      // Signing in with a verified provider identity settles email verification for an
       // account that registered by password and never confirmed.
       emailVerified: true,
       emailVerifiedAt: existing.emailVerifiedAt || now,
@@ -536,14 +608,14 @@ async function upsertGoogleUser(profile, context) {
     },
   });
 
-  await ensureProfile(updated.id);
+  await ensureProfile(updated.id, profileFields);
 
   if (linking) {
     track({
-      type: 'GOOGLE_LINKED',
+      type: spec.linkedEvent,
       userId: updated.id,
       email: updated.email,
-      provider: 'GOOGLE',
+      provider: spec.provider,
       detail: 'linked_on_sign_in',
       ...context,
     });
@@ -578,7 +650,7 @@ async function googleLogin(req, res, next) {
 
     let result;
     try {
-      result = await upsertGoogleUser(profile, context);
+      result = await upsertOAuthUser('GOOGLE', profile, context);
     } catch (err) {
       if (err.message === 'account_disabled') {
         track({
@@ -614,105 +686,115 @@ async function googleLogin(req, res, next) {
   }
 }
 
-const OAUTH_STATE_COOKIE = 'nh_oauth';
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+/**
+ * The authorization-code flow, shared by every provider.
+ *
+ * `CODE_FLOWS` holds only what actually differs — how the consent URL is built, how a code
+ * becomes a verified profile, and which error type the service throws. Google additionally
+ * carries a `nonce` because it returns a signed ID token that could otherwise be replayed;
+ * GitHub has no ID token, so it has no nonce.
+ */
+const CODE_FLOWS = {
+  GOOGLE: {
+    key: 'GOOGLE',
+    label: 'Google',
+    cookieProvider: 'google',
+    isEnabled: () => authConfig.google.supportsCodeFlow,
+    notConfigured: {
+      code: 'GOOGLE_NOT_CONFIGURED',
+      message: 'Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
+    },
+    createState: () => google.createOAuthState(),
+    buildAuthUrl: ({ state, nonce }) => google.buildAuthUrl({ state, nonce }),
+    /** @returns the verified profile, or throws the service's own error type. */
+    exchange: async (code, { nonce }) => {
+      const { profile } = await google.exchangeCode(code, { expectedNonce: nonce });
+      return profile;
+    },
+    isServiceError: (err) => err instanceof google.GoogleAuthError,
+  },
+  GITHUB: {
+    key: 'GITHUB',
+    label: 'GitHub',
+    cookieProvider: 'github',
+    isEnabled: () => authConfig.github.isConfigured,
+    notConfigured: {
+      code: 'GITHUB_NOT_CONFIGURED',
+      message: 'GitHub sign-in is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.',
+    },
+    createState: () => github.createOAuthState(),
+    buildAuthUrl: ({ state }) => github.buildAuthUrl({ state }),
+    exchange: async (code) => {
+      const { profile } = await github.exchangeCodeForProfile(code);
+      return profile;
+    },
+    isServiceError: (err) => err instanceof github.GithubAuthError,
+  },
+};
 
 /**
- * GET /auth/google/start
- *
- * Authorization-code flow entry point. `state` (CSRF) and `nonce` (token replay) are
- * stored in a short-lived HTTP-only cookie and re-checked in the callback, so a forged
- * callback cannot complete a sign-in.
+ * Entry point for a code flow: stash `state` (+ `nonce` where the provider has one) in a
+ * short-lived HTTP-only cookie, then redirect to the provider's consent screen. The cookie
+ * is what makes the callback verifiable — see oauthState.js.
  */
-function googleStart(req, res) {
-  if (!authConfig.google.supportsCodeFlow) {
-    return fail(
-      res,
-      503,
-      'GOOGLE_NOT_CONFIGURED',
-      'Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.'
-    );
+function startCodeFlow(flowKey, req, res) {
+  const flow = CODE_FLOWS[flowKey];
+
+  if (!flow.isEnabled()) {
+    return fail(res, 503, flow.notConfigured.code, flow.notConfigured.message);
   }
 
-  const { state, nonce } = google.createOAuthState();
-  // Where to land in the app afterwards. Restricted to a relative path so this cannot be
-  // turned into an open redirect.
-  const requestedRedirect = typeof req.query.redirect === 'string' ? req.query.redirect : '';
-  const safeRedirect = /^\/[^/\\]/.test(requestedRedirect) ? requestedRedirect : '/dashboard';
+  const { state, nonce } = flow.createState();
+  const redirect = safeRedirectPath(req.query.redirect);
   const rememberMe = req.query.remember === 'true' || req.query.remember === '1';
 
-  res.cookie(
-    OAUTH_STATE_COOKIE,
-    JSON.stringify({ state, nonce, redirect: safeRedirect, rememberMe }),
-    {
-      httpOnly: true,
-      secure: authConfig.cookies.secure,
-      // The callback is a top-level cross-site GET from Google, so "lax" is required
-      // (a "strict" cookie would not be sent and every callback would fail).
-      sameSite: 'lax',
-      domain: authConfig.cookies.domain,
-      path: '/',
-      maxAge: OAUTH_STATE_TTL_MS,
-    }
-  );
+  issueOAuthState(res, { provider: flow.cookieProvider, state, nonce, redirect, rememberMe });
 
-  return res.redirect(google.buildAuthUrl({ state, nonce }));
+  return res.redirect(flow.buildAuthUrl({ state, nonce }));
 }
 
 /**
- * GET /auth/google/callback
+ * Callback for a code flow. This is a browser *navigation*, not an XHR, so every outcome —
+ * success or failure — has to end in a redirect the SPA can act on: `/auth/callback#…` with
+ * the access token in the fragment, or `/login?error=…`.
  *
- * Google redirects the browser here. Because this is a navigation and not an XHR, every
- * outcome ends in a redirect back into the SPA: `/auth/callback#...` on success (the
- * fragment keeps the short-lived access token out of server logs and Referer headers), or
- * `/login?error=...` on failure.
+ * The fragment is deliberate: fragments are never sent to a server, so the short-lived
+ * access token stays out of access logs, proxy logs and `Referer` headers.
  */
-async function googleCallback(req, res, next) {
+async function completeCodeFlow(flowKey, req, res, next) {
+  const flow = CODE_FLOWS[flowKey];
   const context = describeRequest(req);
-  const clearState = () =>
-    res.clearCookie(OAUTH_STATE_COOKIE, {
-      httpOnly: true,
-      secure: authConfig.cookies.secure,
-      sameSite: 'lax',
-      domain: authConfig.cookies.domain,
-      path: '/',
-    });
 
   const redirectWithError = (code, message) => {
-    clearState();
+    clearOAuthState(res);
     const params = new URLSearchParams({ error: code, error_description: message });
     return res.redirect(`${authConfig.clientUrl}/login?${params.toString()}`);
   };
 
   try {
     if (req.query.error) {
-      // The user hit "Cancel" on Google's consent screen.
-      return redirectWithError('GOOGLE_DENIED', 'Google sign-in was cancelled.');
+      // The user hit "Cancel" on the provider's consent screen.
+      track({ type: 'LOGIN_FAILED', provider: flow.key, detail: 'user_denied', ...context });
+      return redirectWithError(`${flow.key}_DENIED`, `${flow.label} sign-in was cancelled.`);
     }
 
-    let stored;
-    try {
-      stored = JSON.parse(req.cookies?.[OAUTH_STATE_COOKIE] || 'null');
-    } catch {
-      stored = null;
+    const handshake = consumeOAuthState(req, flow.cookieProvider);
+    if (!handshake.ok) {
+      track({ type: 'LOGIN_FAILED', provider: flow.key, detail: handshake.code.toLowerCase(), ...context });
+      return redirectWithError(handshake.code, handshake.message);
     }
-    if (!stored?.state || !stored?.nonce) {
-      return redirectWithError('OAUTH_STATE_MISSING', 'Your sign-in attempt expired. Please try again.');
-    }
-    if (req.query.state !== stored.state) {
-      track({ type: 'LOGIN_FAILED', provider: 'GOOGLE', detail: 'oauth_state_mismatch', ...context });
-      return redirectWithError('OAUTH_STATE_MISMATCH', 'Sign-in verification failed. Please try again.');
-    }
+    const stored = handshake.value;
+
     if (typeof req.query.code !== 'string' || !req.query.code) {
-      return redirectWithError('GOOGLE_NO_CODE', 'Google did not return an authorization code.');
+      return redirectWithError(`${flow.key}_NO_CODE`, `${flow.label} did not return an authorization code.`);
     }
 
     let profile;
     try {
-      ({ profile } = await google.exchangeCode(req.query.code, { expectedNonce: stored.nonce }));
+      profile = await flow.exchange(req.query.code, { nonce: stored.nonce });
     } catch (err) {
-      if (err instanceof google.GoogleAuthError) {
-        track({ type: 'LOGIN_FAILED', provider: 'GOOGLE', detail: err.code, ...context });
+      if (flow.isServiceError(err)) {
+        track({ type: 'LOGIN_FAILED', provider: flow.key, detail: err.code, ...context });
         return redirectWithError(err.code, err.message);
       }
       throw err;
@@ -720,16 +802,24 @@ async function googleCallback(req, res, next) {
 
     let result;
     try {
-      result = await upsertGoogleUser(profile, context);
+      result = await upsertOAuthUser(flow.key, profile, context);
     } catch (err) {
       if (err.message === 'account_disabled') {
+        track({
+          type: 'LOGIN_FAILED',
+          userId: err.disabledUser.id,
+          email: err.disabledUser.email,
+          provider: flow.key,
+          detail: 'account_disabled',
+          ...context,
+        });
         return redirectWithError('ACCOUNT_DISABLED', 'This account has been disabled.');
       }
       throw err;
     }
 
     const tokens = await issueSession(req, res, result.user, {
-      provider: 'GOOGLE',
+      provider: flow.key,
       rememberMe: Boolean(stored.rememberMe),
     });
 
@@ -737,25 +827,44 @@ async function googleCallback(req, res, next) {
       type: 'LOGIN_SUCCESS',
       userId: result.user.id,
       email: result.user.email,
-      provider: 'GOOGLE',
+      provider: flow.key,
       detail: 'code_flow',
       ...context,
     });
 
-    clearState();
+    clearOAuthState(res);
 
-    // Fragment, not query string: fragments are not sent to servers or logged, and the
-    // SPA strips it from the URL as soon as it has read the token.
     const fragment = new URLSearchParams({
       access_token: tokens.accessToken,
       expires_in: String(tokens.expiresIn),
       redirect: stored.redirect || '/dashboard',
+      provider: flow.key,
       ...(result.created ? { new_account: '1' } : {}),
     });
     return res.redirect(`${authConfig.clientUrl}/auth/callback#${fragment.toString()}`);
   } catch (err) {
     return next(err);
   }
+}
+
+/** GET /auth/google/start */
+function googleStart(req, res) {
+  return startCodeFlow('GOOGLE', req, res);
+}
+
+/** GET /auth/google/callback */
+function googleCallback(req, res, next) {
+  return completeCodeFlow('GOOGLE', req, res, next);
+}
+
+/** GET /auth/github/start */
+function githubStart(req, res) {
+  return startCodeFlow('GITHUB', req, res);
+}
+
+/** GET /auth/github/callback */
+function githubCallback(req, res, next) {
+  return completeCodeFlow('GITHUB', req, res, next);
 }
 
 // ===========================================================================
@@ -1191,38 +1300,74 @@ async function updateProfile(req, res, next) {
 }
 
 /**
- * POST /auth/google/unlink
+ * Every way this account could still sign in if `excludeProviderKey` were unlinked.
  *
- * Refused when it would leave the account with no way to sign in — a Google-only account
- * must set a password first.
+ * With more than one provider, "can they still get in?" stopped being the same question as
+ * "do they have a password?" — a GitHub-only user who links Google may unlink GitHub, and
+ * vice versa. Getting this wrong either locks people out or blocks a legitimate unlink.
  */
-async function unlinkGoogle(req, res, next) {
+function remainingLoginMethods(user, excludeProviderKey) {
+  const methods = [];
+  if (user.passwordHash) methods.push('password');
+  for (const [key, spec] of Object.entries(OAUTH_PROVIDERS)) {
+    if (key === excludeProviderKey) continue;
+    if (user[spec.idColumn]) methods.push(spec.label);
+  }
+  return methods;
+}
+
+/**
+ * Unlink an OAuth provider from the signed-in account. Refused when it would leave the
+ * account with no way to sign in at all.
+ */
+async function unlinkOAuthProvider(providerKey, req, res, next) {
+  const spec = OAUTH_PROVIDERS[providerKey];
   const context = describeRequest(req);
+
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-    if (!user?.googleId) {
-      return fail(res, 400, 'NOT_LINKED', 'No Google account is linked to this profile');
+    if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'Account no longer exists');
+
+    if (!user[spec.idColumn]) {
+      return fail(res, 400, 'NOT_LINKED', `No ${spec.label} account is linked to this profile`);
     }
-    if (!user.passwordHash) {
+
+    if (!remainingLoginMethods(user, providerKey).length) {
       return fail(
         res,
         409,
         'LAST_LOGIN_METHOD',
-        'Set a password before unlinking Google, otherwise you would not be able to sign in.'
+        `${spec.label} is currently your only way to sign in. Set a password or link another provider first.`
       );
     }
 
-    await prisma.user.update({ where: { id: user.id }, data: { googleId: null } });
-    track({ type: 'GOOGLE_UNLINKED', userId: user.id, email: user.email, ...context });
+    await prisma.user.update({ where: { id: user.id }, data: { [spec.idColumn]: null } });
+    track({
+      type: spec.unlinkedEvent,
+      userId: user.id,
+      email: user.email,
+      provider: spec.provider,
+      ...context,
+    });
 
     const updated = await prisma.user.findUnique({
       where: { id: user.id },
       include: { profile: { include: { userSkills: true } } },
     });
-    return ok(res, { user: toUserDto(updated), message: 'Google account unlinked' });
+    return ok(res, { user: toUserDto(updated), message: `${spec.label} account unlinked` });
   } catch (err) {
     return next(err);
   }
+}
+
+/** POST /auth/google/unlink */
+function unlinkGoogle(req, res, next) {
+  return unlinkOAuthProvider('GOOGLE', req, res, next);
+}
+
+/** POST /auth/github/unlink */
+function unlinkGithub(req, res, next) {
+  return unlinkOAuthProvider('GITHUB', req, res, next);
 }
 
 /** GET /auth/config — what the sign-in page needs to know about this server. */
@@ -1231,6 +1376,11 @@ function getAuthConfig(_req, res) {
     googleEnabled: authConfig.google.isConfigured,
     googleClientId: authConfig.google.clientId || null,
     googleCodeFlowEnabled: authConfig.google.supportsCodeFlow,
+    /**
+     * GitHub has no browser-side flow to advertise a client id for — it is OAuth 2.0 only,
+     * so the single boolean covers it: enabled means the server can run the code flow.
+     */
+    githubEnabled: authConfig.github.isConfigured,
     emailVerificationRequired: EMAIL_VERIFICATION_REQUIRED,
     passwordPolicy: {
       minLength: authConfig.passwordMinLength,
@@ -1253,6 +1403,8 @@ module.exports = {
   googleLogin,
   googleStart,
   googleCallback,
+  githubStart,
+  githubCallback,
   refresh,
   logout,
   logoutAll,
@@ -1265,7 +1417,9 @@ module.exports = {
   changePassword,
   updateProfile,
   unlinkGoogle,
+  unlinkGithub,
   getAuthConfig,
   // exported for tests
   reconcileRole,
+  remainingLoginMethods,
 };

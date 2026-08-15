@@ -29,9 +29,14 @@ async function processJob({ prisma, executor, publish }, job) {
   await prisma.submission.update({ where: { id: job.submissionId }, data: { status: 'RUNNING' } });
   await safePublish(publish, buildEventPayload({ submissionId: job.submissionId, userId, phase: 'RUNNING', status: 'RUNNING' }));
 
-  // Load test cases (sample first, then hidden — both are executed).
+  // A trial run ("Run") is judged against the SAMPLE cases only. Hidden cases are the
+  // graded set and belong to "Submit" — running them here would both mislabel the button
+  // and hand the solver a free oracle for probing tests they are not meant to see.
+  // Read the flag from the row, not the job payload, so a re-enqueued or reconciled job
+  // cannot silently get promoted to a full submission.
+  const sampleOnly = submission.isTrialRun === true;
   const testCases = await prisma.testCase.findMany({
-    where: { questionId: job.questionId },
+    where: { questionId: job.questionId, ...(sampleOnly ? { isSample: true } : {}) },
     orderBy: [{ isSample: 'desc' }, { orderIndex: 'asc' }]
   });
 
@@ -81,22 +86,26 @@ async function processJob({ prisma, executor, publish }, job) {
 
   await prisma.submission.update({ where: { id: job.submissionId }, data: { status: result.status } });
 
-  // Contest scoring: award the question's points on the participant's FIRST accepted
-  // submission for that question (prevents double-counting on repeat submits).
-  if (submission.context === 'CONTEST' && submission.contestId && result.status === 'ACCEPTED') {
-    await awardContestPoints(prisma, submission);
-  }
+  // A trial run is a scratchpad: it must not score a contest, count as an attempt, mark a
+  // question solved, feed the streak, or schedule a revision. Only real submissions do.
+  if (!sampleOnly) {
+    // Contest scoring: award the question's points on the participant's FIRST accepted
+    // submission for that question (prevents double-counting on repeat submits).
+    if (submission.context === 'CONTEST' && submission.contestId && result.status === 'ACCEPTED') {
+      await awardContestPoints(prisma, submission);
+    }
 
-  // Question Library: keep the user's personal progress (solved/attempted, attempts, solve
-  // time) in sync with their real submissions. Best-effort — never break the judge verdict.
-  try {
-    await recordSubmissionOutcome(prisma, {
-      userId,
-      questionId: job.questionId,
-      status: result.status
-    });
-  } catch (err) {
-    console.error('[library] progress update failed:', err.message);
+    // Question Library: keep the user's personal progress (solved/attempted, attempts, solve
+    // time) in sync with their real submissions. Best-effort — never break the judge verdict.
+    try {
+      await recordSubmissionOutcome(prisma, {
+        userId,
+        questionId: job.questionId,
+        status: result.status
+      });
+    } catch (err) {
+      console.error('[library] progress update failed:', err.message);
+    }
   }
 
   // Final event with the verdict.
@@ -112,6 +121,7 @@ async function awardContestPoints(prisma, submission) {
       userId: submission.userId,
       questionId: submission.questionId,
       status: 'ACCEPTED',
+      isTrialRun: false,
       id: { not: submission.id }
     }
   });

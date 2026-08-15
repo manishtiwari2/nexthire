@@ -10,16 +10,16 @@ const { normalizeRole, permissionsFor } = require('../../shared/authz');
  * later is excluded by default instead of leaking until someone remembers to blocklist it.
  *
  * Consequence for callers: query the *whole* row (no Prisma `select`) and let the DTO
- * narrow it. `hasPassword` and `googleLinked` need the secret fields to be present in
- * order to report the booleans the UI actually wants.
+ * narrow it. `hasPassword`, `googleLinked` and `githubLinked` need the secret fields to be
+ * present in order to report the booleans the UI actually wants.
  */
 
 /**
  * The DTO handed to a signed-in user about themselves.
  *
- * `hasPassword` / `googleLinked` are booleans *derived* from secrets, never the secrets:
- * the UI needs to know whether to offer "change password" or "link Google", not the hash
- * or the Google subject id.
+ * `hasPassword` / `googleLinked` / `githubLinked` are booleans *derived* from secrets, never
+ * the secrets: the UI needs to know whether to offer "change password" or "link GitHub", not
+ * the hash or the provider account ids.
  */
 function toUserDto(user) {
   if (!user) return null;
@@ -41,6 +41,7 @@ function toUserDto(user) {
     isActive: user.isActive !== false,
     hasPassword: Boolean(user.passwordHash),
     googleLinked: Boolean(user.googleId),
+    githubLinked: Boolean(user.githubId),
     lastLogin: user.lastLogin ?? null,
     lastActive: user.lastActive ?? null,
     createdAt: user.createdAt,
