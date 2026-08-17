@@ -1,5 +1,5 @@
 /** Roles the server may report. `CANDIDATE` is legacy and normalised to USER server-side. */
-export type Role = 'ADMIN' | 'USER' | 'INTERVIEWER';
+export type Role = 'ADMIN' | 'USER';
 
 /**
  * Capability names from the server's permission matrix (server/src/shared/authz.js).
@@ -16,7 +16,6 @@ export type Permission =
   | 'revision:use'
   | 'submission:create'
   | 'profile:manage'
-  | 'interview:host'
   | 'question:manage'
   | 'contest:manage'
   | 'user:manage'

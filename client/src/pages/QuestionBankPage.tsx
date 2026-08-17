@@ -14,6 +14,9 @@ export const QuestionBankPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [topicId, setTopicId] = useState('');
+  // Default to problems the judge can actually run. The library is mostly external references,
+  // so an unfiltered first page is almost entirely problems that open somewhere else.
+  const [solvable, setSolvable] = useState('true');
   const [page, setPage] = useState(1);
 
   const { user } = useAuthStore();
@@ -27,8 +30,11 @@ export const QuestionBankPage: React.FC = () => {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['questions', search, difficulty, topicId, page],
-    queryFn: () => apiClient.get('/questions', { params: { search, difficulty, topicId, page, limit: 10 } })
+    queryKey: ['questions', search, difficulty, topicId, solvable, page],
+    queryFn: () =>
+      apiClient.get('/questions', {
+        params: { search, difficulty, topicId, solvable: solvable || undefined, page, limit: 10 },
+      })
   });
 
   const deleteMutation = useMutation({
@@ -79,6 +85,8 @@ export const QuestionBankPage: React.FC = () => {
           topicId={topicId}
           onTopicChange={(val) => { setTopicId(val); setPage(1); }}
           topics={topics}
+          solvable={solvable}
+          onSolvableChange={(val) => { setSolvable(val); setPage(1); }}
           page={page}
           totalPages={pagination.totalPages}
           onPageChange={(p) => setPage(p)}

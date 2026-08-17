@@ -149,9 +149,7 @@ export const AppSidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Candidate workspace
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-on-surface-variant">
-              {user?.role === 'INTERVIEWER'
-                ? 'Practice DSA problems and host interview sessions.'
-                : 'Practice DSA problems and join live assessments.'}
+              Practice DSA problems and join live assessments.
             </p>
           </div>
         )}

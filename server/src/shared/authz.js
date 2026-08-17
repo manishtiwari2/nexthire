@@ -2,15 +2,18 @@
  * Single source of truth for roles and permissions.
  *
  * Routes declare the *permission* they need (`requirePermission('question:manage')`)
- * rather than a role, so adding INTERVIEWER capabilities later is a change to this table
- * and nothing else. The client imports the same permission names via `/auth/me`, which
- * returns the caller's resolved permission list — the UI never recomputes the matrix.
+ * rather than a role, so adding a capability later is a change to this table and nothing
+ * else. The client imports the same permission names via `/auth/me`, which returns the
+ * caller's resolved permission list — the UI never recomputes the matrix.
+ *
+ * There were three real roles here. INTERVIEWER granted exactly one permission,
+ * `interview:host`, for an interview feature that was never built — an admin could assign
+ * it and nothing changed. Both are gone; roles are ADMIN and USER.
  */
 
 const ROLES = {
   ADMIN: 'ADMIN',
   USER: 'USER',
-  INTERVIEWER: 'INTERVIEWER',
   /** @deprecated legacy alias for USER; still present in old rows. */
   CANDIDATE: 'CANDIDATE',
 };
@@ -31,13 +34,8 @@ const USER_PERMISSIONS = [
   'profile:manage',
 ];
 
-const INTERVIEWER_PERMISSIONS = [
-  ...USER_PERMISSIONS,
-  'interview:host',
-];
-
 const ADMIN_PERMISSIONS = [
-  ...INTERVIEWER_PERMISSIONS,
+  ...USER_PERMISSIONS,
   'question:manage',
   'contest:manage',
   'user:manage',
@@ -47,13 +45,12 @@ const ADMIN_PERMISSIONS = [
 
 const PERMISSIONS_BY_ROLE = {
   [ROLES.ADMIN]: ADMIN_PERMISSIONS,
-  [ROLES.INTERVIEWER]: INTERVIEWER_PERMISSIONS,
   [ROLES.USER]: USER_PERMISSIONS,
   [ROLES.CANDIDATE]: USER_PERMISSIONS,
 };
 
 /** Roles an admin may assign through the user-management API. */
-const ASSIGNABLE_ROLES = [ROLES.USER, ROLES.INTERVIEWER, ROLES.ADMIN];
+const ASSIGNABLE_ROLES = [ROLES.USER, ROLES.ADMIN];
 
 /**
  * Normalise a stored role to its canonical form. Old rows may still say CANDIDATE;

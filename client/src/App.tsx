@@ -9,6 +9,7 @@ import {
   VerifyEmailRequiredPage,
 } from './components/common/ProtectedRoute';
 import { PageLoader } from './shared/components/ui';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // ---- Auth pages ----
 const LoginPage = React.lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -67,8 +68,11 @@ const AuthBootstrap: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 };
 
 export const App: React.FC = () => (
-  <QueryClientProvider client={queryClient}>
-    <Router>
+  // The boundary is outermost so a crash in any page — or in the router itself — shows a
+  // message rather than a blank screen.
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <Router>
       <AuthBootstrap>
         <div className="relative min-h-screen bg-background text-on-surface">
           <React.Suspense fallback={<PageLoader />}>
@@ -136,9 +140,10 @@ export const App: React.FC = () => (
           {/* Toast Notification Popups */}
           <ToastContainer />
         </div>
-      </AuthBootstrap>
-    </Router>
-  </QueryClientProvider>
+        </AuthBootstrap>
+      </Router>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

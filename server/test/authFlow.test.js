@@ -1069,79 +1069,36 @@ test('an admin can disable a user, which ejects them immediately', async () => {
   assert.strictEqual(back.status, 200);
 });
 
-test('an admin cannot disable or re-role their own account', async () => {
+test('an admin cannot disable their own account', async () => {
   const admin = await createVerifiedUser({ email: 'flow-admin@nexthire.test', mobile: '+15550007777' });
 
   const selfDisable = await admin.client.patch(`/auth/admin/users/${admin.user.id}/status`, { isActive: false });
   assert.strictEqual(selfDisable.status, 400);
   assert.strictEqual(selfDisable.body.code, 'SELF_ACTION');
-
-  const selfRole = await admin.client.patch(`/auth/admin/users/${admin.user.id}/role`, { role: 'USER' });
-  assert.strictEqual(selfRole.status, 400);
-  assert.strictEqual(selfRole.body.code, 'SELF_ACTION');
 });
 
-test('an admin can change a user role, which revokes their sessions', async () => {
+test('ADMIN comes only from configuration, and the role endpoint is gone', async () => {
+  // ADMIN is derived from ADMIN_EMAILS on every sign-in, so a role-change endpoint could only
+  // ever be a no-op or a 409. It was removed rather than left as a button that cannot work.
   const admin = await createVerifiedUser({ email: 'flow-admin@nexthire.test', mobile: '+15550007777' });
   const target = await createVerifiedUser({ email: 'flow-second@nexthire.test', mobile: '+15550008888' });
 
-  const changed = await admin.client.patch(`/auth/admin/users/${target.user.id}/role`, { role: 'INTERVIEWER' });
-  assert.strictEqual(changed.status, 200);
-  assert.strictEqual(changed.body.data.user.role, 'INTERVIEWER');
+  const attempt = await admin.client.patch(`/auth/admin/users/${target.user.id}/role`, { role: 'ADMIN' });
+  assert.strictEqual(attempt.status, 404, 'the role endpoint must no longer exist');
 
-  // Access tokens carry the role, so the old one must stop working.
-  assert.strictEqual((await target.client.get('/auth/me')).status, 401);
+  // The target keeps the role configuration gives them, and their session is untouched.
+  assert.strictEqual((await target.client.get('/auth/me')).status, 200);
+  assert.strictEqual((await target.client.get('/auth/me')).body.data.user.role, 'USER');
 
-  // On the next sign-in the new role — and its extra capability — is in effect.
-  const relogin = new Client();
-  const loggedIn = await relogin.post('/auth/login', {
-    email: 'flow-second@nexthire.test',
-    password: VALID_PASSWORD,
-  });
-  assert.strictEqual(loggedIn.body.data.user.role, 'INTERVIEWER');
-  assert.ok(loggedIn.body.data.user.permissions.includes('interview:host'));
-  assert.ok(!loggedIn.body.data.user.permissions.includes('user:manage'));
-});
-
-test('ADMIN cannot be granted through the API — it comes from configuration', async () => {
-  const admin = await createVerifiedUser({ email: 'flow-admin@nexthire.test', mobile: '+15550007777' });
-  const target = await createVerifiedUser({ email: 'flow-second@nexthire.test', mobile: '+15550008888' });
-
-  const response = await admin.client.patch(`/auth/admin/users/${target.user.id}/role`, { role: 'ADMIN' });
-  assert.strictEqual(response.status, 409);
-  assert.strictEqual(response.body.code, 'ADMIN_BY_CONFIG');
-
+  // And the stored row is still USER — nothing wrote a role behind the endpoint's back.
   const stored = await prisma.user.findUnique({ where: { id: target.user.id } });
   assert.strictEqual(stored.role, 'USER');
+
+  // The configured admin is ADMIN purely because their address is on the list.
+  assert.strictEqual(admin.user.role, 'ADMIN');
 });
 
-test('a configured admin cannot be demoted, because login would restore the role', async () => {
-  const configuredAdmin = await createVerifiedUser({
-    email: 'flow-admin@nexthire.test',
-    mobile: '+15550007777',
-  });
 
-  // A second ADMIN is needed to attempt the demotion (an admin cannot act on themselves).
-  // It is promoted directly in the database and handed a matching token, because signing in
-  // would run reconcileRole and demote it — this account is not on the configured list.
-  const other = await createVerifiedUser({ email: 'flow-second@nexthire.test', mobile: '+15550008888' });
-  await prisma.user.update({ where: { id: other.user.id }, data: { role: 'ADMIN' } });
-  other.client.accessToken = jwt.sign(
-    { sub: other.user.id, email: other.user.email, role: 'ADMIN', tv: 0 },
-    authConfig.accessTokenSecret,
-    { expiresIn: 300, issuer: authConfig.jwtIssuer, audience: authConfig.jwtAudience }
-  );
-
-  const response = await other.client.patch(`/auth/admin/users/${configuredAdmin.user.id}/role`, {
-    role: 'USER',
-  });
-  assert.strictEqual(response.status, 409);
-  assert.strictEqual(response.body.code, 'PROTECTED_ADMIN');
-
-  // The role is unchanged in the database.
-  const stored = await prisma.user.findUnique({ where: { id: configuredAdmin.user.id } });
-  assert.strictEqual(stored.role, 'ADMIN');
-});
 
 test('an admin cannot disable a configured administrator', async () => {
   const admin = await createVerifiedUser({ email: 'flow-admin@nexthire.test', mobile: '+15550007777' });

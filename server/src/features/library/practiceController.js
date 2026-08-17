@@ -1,8 +1,12 @@
 const { prisma } = require('../../shared/db');
 const { QUESTION_CARD_SELECT, flattenCompanies, progressMapFor, toProgressDto } = require('./libraryHelpers');
 
-// Only surface real, solvable content in practice modes (external references have no local judge).
-const PRACTICE_BASE = { contentStatus: 'PUBLISHED' };
+// Practice means "sit down and solve something", so every practice mode returns only problems
+// the judge can actually run. External references have no local statement and no test cases —
+// handing one to a user who asked for a random problem or a timed mock just sends them to
+// another site. `random`/`daily`/`mixed`/`mock` already filtered; `byTopic`/`byCompany` did not,
+// which is why those two returned unsolvable links.
+const PRACTICE_BASE = { contentStatus: 'PUBLISHED', isExternalOnly: false };
 
 function difficultyFilter(query) {
   const d = query.difficulty ? String(query.difficulty).toUpperCase() : null;
@@ -32,7 +36,7 @@ async function pickRandom(where, take) {
 // GET /library/practice/random
 async function random(req, res) {
   try {
-    const where = { ...PRACTICE_BASE, isExternalOnly: false, ...difficultyFilter(req.query) };
+    const where = { ...PRACTICE_BASE, ...difficultyFilter(req.query) };
     if (req.query.topicSlug) where.topic = { slug: String(req.query.topicSlug) };
     const count = Math.max(1, Math.min(20, parseInt(req.query.count) || 1));
     const questions = await pickRandom(where, count);
@@ -45,7 +49,7 @@ async function random(req, res) {
 // GET /library/practice/daily — same question for everyone on a given date (deterministic).
 async function daily(req, res) {
   try {
-    const where = { ...PRACTICE_BASE, isExternalOnly: false };
+    const where = { ...PRACTICE_BASE };
     const total = await prisma.question.count({ where });
     if (total === 0) return res.json({ success: true, data: null });
 
@@ -166,7 +170,7 @@ async function weakTopics(req, res) {
 async function mixed(req, res) {
   try {
     const count = Math.max(2, Math.min(10, parseInt(req.query.count) || 5));
-    const base = { ...PRACTICE_BASE, isExternalOnly: false };
+    const base = { ...PRACTICE_BASE };
     // Roughly 40% easy, 40% medium, 20% hard.
     const easy = await pickRandom({ ...base, difficulty: 'EASY' }, Math.ceil(count * 0.4));
     const medium = await pickRandom({ ...base, difficulty: 'MEDIUM' }, Math.ceil(count * 0.4));
@@ -182,7 +186,7 @@ async function mixed(req, res) {
 async function mock(req, res) {
   try {
     const count = Math.max(1, Math.min(6, parseInt(req.body.count) || 3));
-    const base = { ...PRACTICE_BASE, isExternalOnly: false };
+    const base = { ...PRACTICE_BASE };
     const difficulty = req.body.difficulty ? String(req.body.difficulty).toUpperCase() : null;
     const where = difficulty && ['EASY', 'MEDIUM', 'HARD'].includes(difficulty) ? { ...base, difficulty } : base;
 

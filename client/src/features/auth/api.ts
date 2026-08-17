@@ -237,14 +237,6 @@ export async function adminSetUserStatus(
   return res.data;
 }
 
-export async function adminSetUserRole(id: string, role: string): Promise<{ user: AdminUser; message: string }> {
-  const res = (await apiClient.patch(`/auth/admin/users/${id}/role`, { role })) as Env<{
-    user: AdminUser;
-    message: string;
-  }>;
-  return res.data;
-}
-
 export async function adminSendPasswordReset(
   id: string
 ): Promise<{ message: string; devResetUrl?: string }> {

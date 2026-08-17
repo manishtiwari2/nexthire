@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const path = require('path');
 const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 require('dotenv').config();
@@ -30,10 +29,15 @@ const { prisma } = require('./shared/db');
 const app = express();
 const server = http.createServer(app);
 
+// Socket.IO shares the HTTP allow-list rather than keeping its own. It previously fell back
+// to a hard-coded localhost:5173, so a deployment that set CLIENT_URL but relied on
+// CORS_ORIGINS for its real front-end silently lost live verdict updates (and fell back to
+// polling) with no error anywhere.
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+    origin: authConfig.allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST']
   }
 });
 
@@ -83,8 +87,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // WebSockets
 initSockets(io);

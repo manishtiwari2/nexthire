@@ -7,6 +7,8 @@ require('dotenv').config();
 const { prisma } = require('../src/shared/db');
 const { PROBLEMS, SECTIONS, COMPANIES } = require('../prisma/data/problems');
 const { SHEETS } = require('../prisma/data/sheets');
+const { SOLVABLE, starters } = require('../prisma/data/solvable');
+const { verify } = require('./verifySolvable');
 
 const slugify = (s) => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
@@ -80,6 +82,80 @@ async function seedProblems(topicByName, companyByName) {
   return slugToId;
 }
 
+/**
+ * Seed the problems the judge can actually run: full statement, sample + hidden test cases,
+ * starter code per language, hints and an editorial.
+ *
+ * Idempotent by slug. Test cases, starter code and hints are rebuilt from the definition on
+ * every run so an edit to prisma/data/solvable.js is the single source of truth — otherwise a
+ * corrected expected output would leave the stale one behind and keep failing correct answers.
+ */
+async function seedSolvable(topicByName) {
+  for (const p of SOLVABLE) {
+    const topicId = topicByName.get(p.topic)?.id;
+    if (!topicId) {
+      console.warn(`  ! skipping ${p.slug}: unknown topic "${p.topic}"`);
+      continue;
+    }
+
+    const data = {
+      title: p.title,
+      difficulty: p.difficulty,
+      topicId,
+      description: p.description,
+      constraints: p.constraints,
+      timeLimitMs: p.timeLimitMs || 2000,
+      memoryLimitMb: p.memoryLimitMb || 256,
+      subtopics: p.subtopics || [],
+      estimatedTimeMin: p.estimatedTimeMin || null,
+      sourcePlatform: 'CUSTOM',
+      contentStatus: 'PUBLISHED',
+      // The whole point: these have a local statement and local tests, so the judge runs them.
+      isExternalOnly: false,
+    };
+
+    const question = await prisma.question.upsert({
+      where: { slug: p.slug },
+      update: data,
+      create: { ...data, slug: p.slug },
+    });
+
+    // Rebuild the child records so edits to the definition actually take effect.
+    await prisma.testCase.deleteMany({ where: { questionId: question.id } });
+    await prisma.testCase.createMany({
+      data: p.tests.map((t, i) => ({
+        questionId: question.id,
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        explanation: t.explanation || null,
+        isSample: Boolean(t.isSample),
+        orderIndex: i,
+      })),
+    });
+
+    await prisma.starterCode.deleteMany({ where: { questionId: question.id } });
+    await prisma.starterCode.createMany({
+      data: starters(p.starters).map((sc) => ({ questionId: question.id, ...sc })),
+    });
+
+    await prisma.hint.deleteMany({ where: { questionId: question.id } });
+    if (p.hints?.length) {
+      await prisma.hint.createMany({
+        data: p.hints.map((content, orderIndex) => ({ questionId: question.id, content, orderIndex })),
+      });
+    }
+
+    if (p.editorial) {
+      await prisma.editorial.upsert({
+        where: { questionId: question.id },
+        update: { content: p.editorial.content, solution: p.editorial.solution },
+        create: { questionId: question.id, content: p.editorial.content, solution: p.editorial.solution },
+      });
+    }
+  }
+  return SOLVABLE.length;
+}
+
 // Resolve a sheet's membership into ordered items: [{ slug, section, orderIndex }].
 function resolveMembership(sheet) {
   if (sheet.membership === 'all') {
@@ -133,15 +209,26 @@ async function seedSheets(slugToId) {
 }
 
 async function main() {
-  console.log('Seeding Question Library…');
+  // Refuse to seed a problem whose own reference solution disagrees with its expected output.
+  // A wrong expected output is the worst bug a judge can ship: the user writes a correct
+  // solution, gets WRONG_ANSWER, and has no way to tell that from a bug in their own code.
+  console.log('Verifying solvable problem set…');
+  if (!(await verify())) {
+    throw new Error('solvable problem set failed verification — nothing was written');
+  }
+
+  console.log('\nSeeding Question Library…');
   const topics = await seedTopics();
   const companies = await seedCompanies();
   const topicByName = new Map(topics.map((t) => [t.name, t]));
   const companyByName = new Map(companies.map((c) => [c.name, c]));
   console.log(`  topics: ${topics.length}, companies: ${companies.length}`);
 
+  const solvableCount = await seedSolvable(topicByName);
+  console.log(`  solvable problems (local statement + judge test cases): ${solvableCount}`);
+
   const slugToId = await seedProblems(topicByName, companyByName);
-  console.log(`  problems: ${slugToId.size} referenced`);
+  console.log(`  external references (metadata + link only): ${slugToId.size}`);
 
   await seedSheets(slugToId);
   console.log('Done.');
