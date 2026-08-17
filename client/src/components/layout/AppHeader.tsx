@@ -44,7 +44,7 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
   };
 
   const avatar = user?.avatar || user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(user?.email || 'user')}`;
-  const roleLabel = isAdmin ? 'Administrator' : user?.role === 'INTERVIEWER' ? 'Interviewer' : 'Member';
+  const roleLabel = isAdmin ? 'Administrator' : 'Member';
 
   return (
     <header className="glass sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-outline-variant px-4 sm:px-6">

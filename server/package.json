@@ -10,7 +10,10 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "node scripts/seedLibrary.js",
-    "migrate:auth": "node scripts/migrateAuth.js"
+    "migrate:auth": "node scripts/migrateAuth.js",
+    "verify:problems": "node scripts/verifySolvable.js",
+    "prisma:migrate": "prisma migrate deploy",
+    "test:e2e": "node scripts/e2eSmoke.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",

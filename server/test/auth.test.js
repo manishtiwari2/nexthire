@@ -49,9 +49,6 @@ test('reconcileRole promotes configured admins and demotes stale ones', () => {
   // keeping their access.
   assert.strictEqual(reconcileRole({ email: 'nobody@example.com', role: 'ADMIN' }), 'USER');
 
-  // An admin-assigned INTERVIEWER survives a login (the list only governs ADMIN).
-  assert.strictEqual(reconcileRole({ email: 'nobody@example.com', role: 'INTERVIEWER' }), 'INTERVIEWER');
-
   // Legacy rows normalise.
   assert.strictEqual(reconcileRole({ email: 'nobody@example.com', role: 'CANDIDATE' }), 'USER');
 });
@@ -64,7 +61,6 @@ test('permission matrix grants admins management capabilities and users none', (
   for (const permission of ['question:manage', 'contest:manage', 'user:manage', 'analytics:read']) {
     assert.ok(authz.hasPermission('ADMIN', permission), `ADMIN should have ${permission}`);
     assert.ok(!authz.hasPermission('USER', permission), `USER must not have ${permission}`);
-    assert.ok(!authz.hasPermission('INTERVIEWER', permission), `INTERVIEWER must not have ${permission}`);
   }
 });
 
@@ -93,12 +89,17 @@ test('legacy CANDIDATE role has exactly USER permissions', () => {
   assert.deepStrictEqual(authz.permissionsFor('CANDIDATE'), authz.permissionsFor('USER'));
 });
 
-test('INTERVIEWER is a superset of USER (future-ready, no admin rights)', () => {
+test('there are exactly two real roles, and ADMIN is a strict superset of USER', () => {
+  // The INTERVIEWER role was removed in the pre-deployment audit: it granted one permission,
+  // `interview:host`, for a feature that does not exist. Assigning it changed nothing.
+  assert.deepStrictEqual(Object.keys(authz.PERMISSIONS_BY_ROLE).sort(), ['ADMIN', 'CANDIDATE', 'USER']);
+  assert.deepStrictEqual(authz.ASSIGNABLE_ROLES, ['USER', 'ADMIN']);
+
   const user = authz.permissionsFor('USER');
-  const interviewer = authz.permissionsFor('INTERVIEWER');
-  for (const permission of user) assert.ok(interviewer.includes(permission));
-  assert.ok(interviewer.includes('interview:host'));
-  assert.ok(!interviewer.includes('user:manage'));
+  const admin = authz.permissionsFor('ADMIN');
+  for (const permission of user) assert.ok(admin.includes(permission), `ADMIN should inherit ${permission}`);
+  assert.ok(admin.length > user.length);
+  assert.ok(!JSON.stringify(admin).includes('interview:host'), 'the dead interview permission must be gone');
 });
 
 // ===========================================================================
@@ -480,12 +481,8 @@ test('change-password requires the confirmation to match and the value to differ
   );
 });
 
-test('admin role updates only accept assignable roles', () => {
-  for (const role of authz.ASSIGNABLE_ROLES) {
-    assert.ok(parse(validators.adminUpdateRoleSchema, { role }).success);
-  }
-  assert.ok(!parse(validators.adminUpdateRoleSchema, { role: 'CANDIDATE' }).success);
-  assert.ok(!parse(validators.adminUpdateRoleSchema, { role: 'SUPERUSER' }).success);
+test('there is no admin role-update schema — roles are config, not API input', () => {
+  assert.strictEqual(validators.adminUpdateRoleSchema, undefined);
 });
 
 test('fieldErrors flattens a ZodError into one message per field', () => {

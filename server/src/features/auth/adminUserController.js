@@ -1,5 +1,5 @@
 const { prisma } = require('../../shared/db');
-const { authConfig, roleForEmail } = require('./authConfig');
+const { authConfig } = require('./authConfig');
 const { ROLES, normalizeRole } = require('../../shared/authz');
 const { toAdminUserDto } = require('./userDto');
 const { createEmailToken } = require('./tokenService');
@@ -214,69 +214,6 @@ async function setUserStatus(req, res, next) {
  * the role they were minted with — without this the user would keep their old permissions
  * until the token expired.
  */
-async function setUserRole(req, res, next) {
-  const context = describeRequest(req);
-  try {
-    const nextRole = req.body.role;
-
-    if (req.params.id === req.user.id) {
-      return fail(res, 400, 'SELF_ACTION', 'You cannot change your own role');
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!user) return fail(res, 404, 'NOT_FOUND', 'User not found');
-
-    const currentRole = normalizeRole(user.role);
-    if (currentRole === nextRole) {
-      return ok(res, { user: toAdminUserDto(user), message: `Already ${nextRole}` });
-    }
-
-    // The configured list wins at login, so refuse changes that would be silently undone.
-    const entitled = roleForEmail(user.email);
-    if (entitled === ROLES.ADMIN && nextRole !== ROLES.ADMIN) {
-      return fail(
-        res,
-        409,
-        'PROTECTED_ADMIN',
-        'This address is listed in ADMIN_EMAILS and would be restored to ADMIN on next sign-in. Remove it from the list first.'
-      );
-    }
-    if (nextRole === ROLES.ADMIN && entitled !== ROLES.ADMIN) {
-      return fail(
-        res,
-        409,
-        'ADMIN_BY_CONFIG',
-        'ADMIN is granted by the ADMIN_EMAILS configuration. Add this address to that list to promote the account.'
-      );
-    }
-
-    const updated = await prisma.user.update({ where: { id: user.id }, data: { role: nextRole } });
-    await sessionService.revokeEverything(user.id, 'role_changed');
-
-    track({
-      type: 'ROLE_CHANGED',
-      userId: user.id,
-      email: user.email,
-      detail: `${currentRole} -> ${nextRole} by admin ${req.user.email}`,
-      ...context,
-    });
-
-    return ok(res, {
-      user: toAdminUserDto(updated),
-      message: `Role changed to ${nextRole}. The user's sessions were revoked.`,
-    });
-  } catch (err) {
-    return next(err);
-  }
-}
-
-/**
- * POST /admin/users/:id/reset-password
- *
- * Sends the user a reset link rather than setting a password on their behalf: an admin
- * should never know a user's credentials. Also revokes sessions, since this action is
- * normally taken in response to a suspected compromise.
- */
 async function sendPasswordReset(req, res, next) {
   const context = describeRequest(req);
   try {
@@ -421,7 +358,6 @@ module.exports = {
   getUser,
   getLoginHistory,
   setUserStatus,
-  setUserRole,
   sendPasswordReset,
   unlockUser,
   revokeUserSessions,

@@ -10,6 +10,9 @@ interface QuestionFilterBarProps {
   topicId: string;
   onTopicChange: (value: string) => void;
   topics: Array<{ id: string; name: string }>;
+  /** '' = everything, 'true' = solvable here, 'false' = external references only. */
+  solvable: string;
+  onSolvableChange: (value: string) => void;
   page: number;
   totalPages: number;
   onPageChange: (newPage: number) => void;
@@ -23,6 +26,8 @@ export const QuestionFilterBar: React.FC<QuestionFilterBarProps> = ({
   topicId,
   onTopicChange,
   topics,
+  solvable,
+  onSolvableChange,
   page,
   totalPages,
   onPageChange,
@@ -49,6 +54,18 @@ export const QuestionFilterBar: React.FC<QuestionFilterBarProps> = ({
             <option value="EASY">Easy</option>
             <option value="MEDIUM">Medium</option>
             <option value="HARD">Hard</option>
+          </Select>
+          <Select
+            value={solvable}
+            onChange={(e) => onSolvableChange(e.target.value)}
+            aria-label="Filter by whether the problem can be solved here"
+            containerClassName="sm:w-52"
+          >
+            {/* Most of the library is reference links to other platforms; only a subset has a
+                local statement and test cases the judge can run. */}
+            <option value="">All problems</option>
+            <option value="true">Solvable here</option>
+            <option value="false">Reference links</option>
           </Select>
           <Select
             value={topicId}

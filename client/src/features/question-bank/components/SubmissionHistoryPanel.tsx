@@ -47,7 +47,10 @@ export const SubmissionHistoryPanel: React.FC<SubmissionHistoryPanelProps> = ({
     <div className="space-y-3">
       {submissions.map((sub: any) => {
         const isAccepted = sub.status === 'ACCEPTED';
-        const exec = sub.executions && sub.executions[0];
+        // Every submission endpoint now returns the hidden-test-safe DTO, which carries a
+        // single `execution` object. (The contest history endpoint always did — this panel
+        // only understood the raw `executions[]` shape, so contest rows showed no metrics.)
+        const exec = sub.execution;
 
         return (
           <div
@@ -75,7 +78,7 @@ export const SubmissionHistoryPanel: React.FC<SubmissionHistoryPanelProps> = ({
                 <span className="flex items-center gap-1">
                   <Cpu className="h-3 w-3 text-tertiary" /> {exec.memoryUsed != null ? `${exec.memoryUsed}MB` : '—'}
                 </span>
-                <span>Passed {exec.passCount ?? 0}/{exec.totalTestCases ?? 0}</span>
+                <span>Passed {exec.passedTests ?? 0}/{exec.totalTests ?? 0}</span>
               </div>
             )}
 

@@ -2,10 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "client",
+      "name": "nexthire-client",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "client",
+      "runtimeArgs": ["run", "dev", "--prefix", "client"],
       "port": 3000
     }
   ]

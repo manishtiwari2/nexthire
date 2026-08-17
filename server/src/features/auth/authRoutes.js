@@ -16,7 +16,6 @@ const {
   changePasswordSchema,
   updateProfileSchema,
   adminListUsersSchema,
-  adminUpdateRoleSchema,
   adminSetActiveSchema,
 } = require('./authValidators');
 
@@ -178,7 +177,6 @@ router.get('/admin/users', ...adminOnly, validate(adminListUsersSchema, 'query')
 router.get('/admin/users/:id', ...adminOnly, admin.getUser);
 router.get('/admin/users/:id/login-history', ...adminOnly, admin.getLoginHistory);
 router.patch('/admin/users/:id/status', ...adminOnly, validate(adminSetActiveSchema), admin.setUserStatus);
-router.patch('/admin/users/:id/role', ...adminOnly, validate(adminUpdateRoleSchema), admin.setUserRole);
 router.post('/admin/users/:id/reset-password', ...adminOnly, admin.sendPasswordReset);
 router.post('/admin/users/:id/unlock', ...adminOnly, admin.unlockUser);
 router.post('/admin/users/:id/revoke-sessions', ...adminOnly, admin.revokeUserSessions);

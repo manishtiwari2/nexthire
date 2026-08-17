@@ -2,6 +2,7 @@ const { prisma } = require('../../shared/db');
 const { dispatchJudgeJob } = require('../judge/judgeDispatch');
 const { isLanguageSupported, SUPPORTED_LANGUAGES } = require('../judge/executor/languageConfig');
 const { progressMapFor, toProgressDto } = require('../library/libraryHelpers');
+const { buildSubmissionDto } = require('../submission/submissionDto');
 
 const SOURCE_PLATFORMS = ['LEETCODE', 'GEEKSFORGEEKS', 'HACKERRANK', 'CODEFORCES', 'CODECHEF', 'ATCODER', 'INTERVIEWBIT', 'CUSTOM'];
 // Mirror the Prisma enums. Browse filters are validated against these before they reach the
@@ -131,6 +132,12 @@ async function getQuestions(req, res) {
       if (!v) return res.status(400).json({ success: false, error: `Unknown frequency "${frequency}". Expected one of: ${FREQUENCY_BANDS.join(', ')}`, code: 'INVALID_FILTER' });
       where.frequencyBand = v;
     }
+    // Most of the library is external references (metadata + a link, no local statement and no
+    // test cases), so browsing mixes problems you can solve here with ones you cannot. This
+    // lets the client ask for one or the other instead of making the user find out by clicking.
+    if (req.query.solvable === 'true') where.isExternalOnly = false;
+    else if (req.query.solvable === 'false') where.isExternalOnly = true;
+
     if (topicId) where.topicId = String(topicId);
     if (topicSlug) where.topic = { slug: String(topicSlug) };
     if (tagId) where.questionTags = { some: { tagId: String(tagId) } };
@@ -402,7 +409,14 @@ async function deleteQuestion(req, res) {
 
 async function submitCodeExecution(req, res) {
   try {
-    const { code, language, context, contestId, interviewId, mode } = req.body;
+    // `context`/`contestId` are deliberately NOT read from the body. They used to be, which
+    // let a client post `context: 'CONTEST', contestId: <any id>` here and bypass every rule
+    // the contest endpoint enforces — the contest window, participation, and whether the
+    // question is even in that contest. Confirmed exploitable: it awarded points in a contest
+    // that had already ended, and in a contest that never contained the question.
+    // This endpoint is now unconditionally PRACTICE; contest submissions go through
+    // POST /contests/:id/submit, which owns those checks.
+    const { code, language, mode } = req.body;
     const questionId = req.params.id;
     const normalizedLanguage = (language || 'PYTHON').toUpperCase();
 
@@ -445,9 +459,7 @@ async function submitCodeExecution(req, res) {
       data: {
         userId: req.user.id,
         questionId: question.id,
-        context: context || 'PRACTICE',
-        contestId: contestId || null,
-        interviewId: interviewId || null,
+        context: 'PRACTICE',
         code,
         language: normalizedLanguage,
         status: 'PENDING',
@@ -482,7 +494,7 @@ async function getSubmissionResult(req, res) {
   try {
     const submission = await prisma.submission.findUnique({
       where: { id: req.params.submissionId },
-      include: { executions: true, question: true }
+      include: { executions: { orderBy: { judgedAt: 'desc' }, take: 1 } }
     });
 
     if (!submission) {
@@ -490,11 +502,15 @@ async function getSubmissionResult(req, res) {
     }
 
     // Security (IDOR): a user may only read their own submissions; admins may read any.
-    if (submission.userId !== req.user.id && req.user.role !== 'ADMIN') {
+    const isAdmin = req.user.role === 'ADMIN';
+    if (submission.userId !== req.user.id && !isAdmin) {
       return res.status(403).json({ success: false, error: 'Not authorized to view this submission' });
     }
 
-    res.json({ success: true, data: submission });
+    // Must go through the DTO. Returning the raw row shipped `executions[].testResults`,
+    // which carries the expected output of every HIDDEN test case — handing the solver the
+    // graded answers for the tests they are explicitly not allowed to see.
+    res.json({ success: true, data: buildSubmissionDto(submission, { isAdmin }) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -503,6 +519,7 @@ async function getSubmissionResult(req, res) {
 async function getUserSubmissionsForQuestion(req, res) {
   try {
     const questionId = req.params.id;
+    const isAdmin = req.user.role === 'ADMIN';
     const submissions = await prisma.submission.findMany({
       where: {
         questionId,
@@ -515,7 +532,8 @@ async function getUserSubmissionsForQuestion(req, res) {
       take: 20
     });
 
-    res.json({ success: true, data: submissions });
+    // Same hidden-test-case protection as every other submission read path.
+    res.json({ success: true, data: submissions.map((s) => buildSubmissionDto(s, { isAdmin })) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

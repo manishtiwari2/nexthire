@@ -9,6 +9,13 @@
 # BEFORE FIRST RUN, pull the judge sandbox images onto the host — the worker shells out to the
 # host Docker daemon to create them, and a missing image surfaces as INTERNAL_ERROR verdicts:
 #   docker pull python:3.10-slim && docker pull gcc:13 && docker pull eclipse-temurin:17-jdk
+#
+# Those stock images have no uid 1000, and the sandbox runs every container as --user 1000:1000.
+# Python and C++ do not care; a JDK that wants a writable HOME can. If Java submissions come back
+# INTERNAL_ERROR or with a "cannot determine home" error, build the purpose-made images, which
+# create that user, and point the JUDGE_IMAGE_* variables at them:
+#   cd server && docker build -t nexthire-judge-java -f docker/Dockerfile.java .
+#   # then in .env:  JUDGE_IMAGE_JAVA=nexthire-judge-java
 
 name: nexthire
 

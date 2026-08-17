@@ -162,14 +162,10 @@ const updateProfileSchema = z
 
 const adminListUsersSchema = z.object({
   q: z.string().trim().max(120).optional(),
-  role: z.enum(['ADMIN', 'USER', 'INTERVIEWER', 'CANDIDATE']).optional(),
+  role: z.enum(['ADMIN', 'USER', 'CANDIDATE']).optional(),
   status: z.enum(['active', 'disabled', 'unverified']).optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
-
-const adminUpdateRoleSchema = z.object({
-  role: z.enum(ASSIGNABLE_ROLES, { errorMap: () => ({ message: `Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}` }) }),
 });
 
 const adminSetActiveSchema = z.object({
@@ -229,6 +225,5 @@ module.exports = {
   changePasswordSchema,
   updateProfileSchema,
   adminListUsersSchema,
-  adminUpdateRoleSchema,
   adminSetActiveSchema,
 };

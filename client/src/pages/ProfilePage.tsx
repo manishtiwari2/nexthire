@@ -167,7 +167,7 @@ export const ProfilePage: React.FC = () => {
   // ---- Header ----
   function ProfileHeader() {
     const avatar = user!.avatar || user!.avatarUrl || '';
-    const roleLabel = user!.role === 'ADMIN' ? 'Administrator' : user!.role === 'INTERVIEWER' ? 'Interviewer' : 'Member';
+    const roleLabel = user!.role === 'ADMIN' ? 'Administrator' : 'Member';
 
     return (
       <Card className="flex flex-col gap-5 sm:flex-row sm:items-center">

@@ -14,9 +14,6 @@ generator client {
 enum Role {
   ADMIN
   USER
-  // Reserved for the interviewer experience (panel/host tooling). No permissions are
-  // granted to it yet beyond USER — see shared/authz.js for the permission matrix.
-  INTERVIEWER
   /// @deprecated Legacy name for USER. Retained so existing rows stay readable during
   /// migration; `scripts/migrateAuth.js` rewrites CANDIDATE -> USER.
   CANDIDATE
@@ -121,13 +118,6 @@ enum SheetKind {
   CUSTOM
 }
 
-enum InterviewStatus {
-  SCHEDULED
-  WAITING_ROOM
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
 
 enum SubmissionStatus {
   PENDING
@@ -146,22 +136,8 @@ enum SubmissionStatus {
 enum SubmissionContext {
   PRACTICE
   CONTEST
-  INTERVIEW
 }
 
-enum ParticipantRole {
-  CANDIDATE
-  INTERVIEWER
-  OBSERVER
-}
-
-enum NotificationType {
-  SYSTEM
-  CONTEST
-  INTERVIEW
-  SUBMISSION
-  AI_INSIGHT
-}
 
 // ==========================================
 // USER & AUTHENTICATION
@@ -219,14 +195,9 @@ model User {
   profile               Profile?
   submissions           Submission[]
   contestParticipants   ContestParticipant[]
-  interviewParticipants InterviewParticipant[]
   revisionSchedules     RevisionSchedule[]
   createdContests       Contest[]              @relation("ContestHost")
-  createdInterviews     Interview[]            @relation("InterviewHost")
   createdInvites        ContestInvite[]        @relation("InviteCreator")
-  notifications         Notification[]
-  aiFeedbacks           AIFeedback[]
-  aiHintRequests        AIHintRequest[]
   studySheets           StudySheet[]           @relation("SheetOwner")
   questionProgress      UserQuestionProgress[]
   questionNotes         UserQuestionNote[]
@@ -366,8 +337,6 @@ model Question {
   contestQuestions ContestQuestion[]
   submissions      Submission[]
   revisions        RevisionSchedule[]
-  interviews       Interview[]
-  aiHintRequests   AIHintRequest[]
   sheetItems       SheetItem[]
   progress         UserQuestionProgress[]
   userNotes        UserQuestionNote[]
@@ -611,53 +580,6 @@ model ContestParticipant {
   @@unique([contestId, userId])
 }
 
-// ==========================================
-// INTERVIEWS & PARTICIPATION
-// ==========================================
-
-model Interview {
-  id           String                 @id @default(uuid())
-  roomCode     String                 @unique
-  position     String
-  scheduledAt  DateTime
-  status       InterviewStatus        @default(SCHEDULED)
-  hostId       String
-  host         User                   @relation("InterviewHost", fields: [hostId], references: [id])
-  problemId    String?
-  problem      Question?              @relation(fields: [problemId], references: [id])
-
-  participants InterviewParticipant[]
-  submissions  Submission[]
-  report       InterviewReport?
-  aiSessions   AIInterviewerSession[]
-}
-
-model InterviewParticipant {
-  id          String          @id @default(uuid())
-  interviewId String
-  interview   Interview       @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role        ParticipantRole @default(CANDIDATE)
-  joinedAt    DateTime?
-
-  @@unique([interviewId, userId])
-}
-
-model InterviewReport {
-  id                  String    @id @default(uuid())
-  interviewId         String    @unique
-  interview           Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  overallScore        Int
-  problemSolvingScore Int
-  codeQualityScore    Int
-  communicationScore  Int
-  systemDesignScore   Int
-  feedback            String
-  strengths           String
-  improvements        String
-  createdAt           DateTime  @default(now())
-}
 
 // ==========================================
 // SUBMISSIONS & SEPARATE EXECUTION RESULTS
@@ -672,8 +594,6 @@ model Submission {
   context     SubmissionContext @default(PRACTICE)
   contestId   String?
   contest     Contest?          @relation(fields: [contestId], references: [id])
-  interviewId String?
-  interview   Interview?        @relation(fields: [interviewId], references: [id])
   code        String
   language    Language
   status      SubmissionStatus  @default(PENDING)
@@ -689,7 +609,6 @@ model Submission {
   @@index([userId])
   @@index([questionId])
   @@index([contestId])
-  @@index([interviewId])
   // History and progress queries always filter trial runs out.
   @@index([userId, isTrialRun])
 }
@@ -716,52 +635,4 @@ model ExecutionResult {
   @@index([submissionId])
 }
 
-// ==========================================
-// NOTIFICATIONS
-// ==========================================
 
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  message   String
-  type      NotificationType @default(SYSTEM)
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
-
-  @@index([userId])
-}
-
-// ==========================================
-// AI EXTENSION POINTS (FUTURE RESERVED SCHEMA)
-// ==========================================
-
-model AIFeedback {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeSnippet    String
-  suggestedFix   String
-  explanation    String
-  createdAt      DateTime @default(now())
-}
-
-model AIHintRequest {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionId String
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  hintText   String
-  createdAt  DateTime @default(now())
-}
-
-model AIInterviewerSession {
-  id          String    @id @default(uuid())
-  interviewId String
-  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  transcript  String
-  summary     String
-  createdAt   DateTime  @default(now())
-}

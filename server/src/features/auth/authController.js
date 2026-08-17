@@ -63,7 +63,7 @@ function defaultAvatar(email) {
  *
  * The configured admin list is authoritative in both directions: emails on it are ADMIN,
  * and an ADMIN whose email has been removed from it is demoted. Any other role
- * (USER / INTERVIEWER) is left alone so an admin-assigned INTERVIEWER survives login.
+ * (USER) is left alone so an admin-assigned role survives login.
  */
 function reconcileRole(user) {
   const entitled = roleForEmail(user.email);

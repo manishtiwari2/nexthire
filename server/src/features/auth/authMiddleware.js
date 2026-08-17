@@ -1,6 +1,5 @@
 const { prisma } = require('../../shared/db');
 const { verifyAccessToken } = require('./tokenService');
-const { authConfig } = require('./authConfig');
 const { normalizeRole, hasPermission, ROLES } = require('../../shared/authz');
 
 /**
@@ -174,25 +173,11 @@ function requireEmailVerified(req, res, next) {
   return next();
 }
 
-/** Require one of the given roles. */
-function requireRole(...allowed) {
-  const roles = allowed.flat().map(normalizeRole);
-  return function requireRoleMiddleware(req, res, next) {
-    if (!req.user) return unauthorized(res, 'TOKEN_MISSING', 'Authentication required');
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        error: 'You do not have permission to perform this action',
-        code: 'FORBIDDEN',
-      });
-    }
-    return next();
-  };
-}
-
 /**
- * Require a capability from the permission matrix (shared/authz.js). Preferred over
- * requireRole: routes describe what they need, not who is allowed.
+ * Require a capability from the permission matrix (shared/authz.js). Routes describe what
+ * they need, not who is allowed — so adding a role is a change to the matrix and nothing
+ * else. This is the only authorization primitive; the old requireRole/requireAdmin pair was
+ * unused and has been removed rather than left as a second way to spell the same thing.
  */
 function requirePermission(permission) {
   return function requirePermissionMiddleware(req, res, next) {
@@ -209,36 +194,7 @@ function requirePermission(permission) {
   };
 }
 
-const requireAdmin = requireRole(ROLES.ADMIN);
-
-// ---------------------------------------------------------------------------
-// Resource-scoped guards (unchanged semantics, now role-normalised)
-// ---------------------------------------------------------------------------
-
-async function requireContestParticipant(req, res, next) {
-  try {
-    const contestId = req.params.contestId || req.params.id;
-    if (!contestId) return next();
-
-    const participant = await prisma.contestParticipant.findUnique({
-      where: { contestId_userId: { contestId, userId: req.user.id } },
-    });
-
-    if (!participant && req.user.role !== ROLES.ADMIN) {
-      return res.status(403).json({
-        success: false,
-        error: 'Must be a registered contest participant',
-        code: 'FORBIDDEN',
-      });
-    }
-
-    req.contestParticipant = participant;
-    return next();
-  } catch (err) {
-    return next(err);
-  }
-}
-
+/** Resource-scoped: only a contest's own host (or an admin) may manage it. */
 async function requireContestHost(req, res, next) {
   try {
     const contestId = req.params.contestId || req.params.id;
@@ -264,50 +220,12 @@ async function requireContestHost(req, res, next) {
   }
 }
 
-async function requireInterviewHost(req, res, next) {
-  try {
-    const interviewId = req.params.interviewId || req.params.id;
-    if (!interviewId) return next();
-
-    const interview = await prisma.interview.findUnique({ where: { id: interviewId } });
-    if (!interview) {
-      return res.status(404).json({
-        success: false,
-        error: 'Interview session not found',
-        code: 'NOT_FOUND',
-      });
-    }
-
-    if (interview.hostId !== req.user.id && req.user.role !== ROLES.ADMIN) {
-      return res.status(403).json({
-        success: false,
-        error: 'Requires Interview Host permission',
-        code: 'FORBIDDEN',
-      });
-    }
-
-    req.interview = interview;
-    return next();
-  } catch (err) {
-    return next(err);
-  }
-}
-
 module.exports = {
   requireAuthenticated,
   attachUser,
   requireEmailVerified,
-  requireRole,
   requirePermission,
-  requireAdmin,
-  requireContestParticipant,
   requireContestHost,
-  requireInterviewHost,
   resolveAccessToken,
   bearerToken,
-  /**
-   * @deprecated Legacy export kept so any straggling `require(...).JWT_SECRET` keeps
-   * working. New code must not sign or verify tokens outside tokenService.
-   */
-  JWT_SECRET: authConfig.accessTokenSecret,
 };

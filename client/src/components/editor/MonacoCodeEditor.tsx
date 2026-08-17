@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 // Side-effect import: points Monaco at our own bundle (not a CDN) and registers only the
 // three languages the judge runs. Must be imported before the editor mounts.
@@ -9,8 +9,6 @@ import {
   Minus, Plus, WrapText, Maximize2, Minimize2, Check, BookOpen,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
-import { getAccessToken } from '../../api/tokenStore';
-import { io, Socket } from 'socket.io-client';
 import { awaitVerdict } from '../../api/judgeClient';
 import { useNotificationStore } from '../../store/useNotificationStore';
 import { Button } from '../../shared/components/ui';
@@ -21,7 +19,6 @@ import { LanguageDocsPanel } from './LanguageDocsPanel';
 
 interface MonacoCodeEditorProps {
   questionId?: string;
-  roomCode?: string;
   contestId?: string;
   onSubmitted?: () => void;
   /** The question's starter templates, so Reset restores the right per-language skeleton. */
@@ -55,13 +52,12 @@ const iconBtn =
   'transition-colors hover:border-outline hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40';
 
 export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
-  questionId, roomCode, contestId, onSubmitted, starterCodes, disabledReason,
+  questionId, contestId, onSubmitted, starterCodes, disabledReason,
 }) => {
   const {
     language, theme, fontSize, code, isExecuting, phase, result,
     setLanguage, setTheme, setFontSize, setCode, setIsExecuting, setPhase, setResult,
   } = useEditorStore();
-  const socketRef = useRef<Socket | null>(null);
   const { addToast } = useNotificationStore();
   const locked = Boolean(disabledReason);
   const busy = isExecuting;
@@ -74,35 +70,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // which previously shared one global buffer across every problem.
   const { saveState, resetToStarter } = useEditorSession(questionId, starterCodes);
 
-  // Live collaboration socket (only when inside a room). Authenticated so the server accepts it.
-  useEffect(() => {
-    if (!roomCode) return;
-    const socket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
-      // From the in-memory token store, not localStorage — see api/tokenStore.
-      auth: (cb) => cb({ token: getAccessToken() })
-    });
-    socketRef.current = socket;
-    socket.emit('join-room', { roomCode, userName: 'User' });
-    socket.on('code-update', ({ code: newCode, language: newLang }) => {
-      if (newCode && newCode !== code) setCode(newCode);
-      if (newLang && newLang !== language) setLanguage(newLang);
-    });
-    return () => {
-      socket.off('code-update');
-      socket.disconnect();
-    };
-    // Intentionally keyed on roomCode only: the socket connects/disconnects with the room, and
-    // reconnecting on every code/language keystroke would drop the collaboration session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode]);
-
-  const handleCodeChange = (value: string | undefined) => {
-    const newCode = value || '';
-    setCode(newCode);
-    if (socketRef.current && roomCode) {
-      socketRef.current.emit('code-change', { roomCode, code: newCode, language });
-    }
-  };
+  const handleCodeChange = (value: string | undefined) => setCode(value || '');
 
   // Shared run/submit flow. Reads the freshest code/language from the store (not a stale
   // closure) so keyboard-shortcut invocations always judge what's on screen. The verdict comes

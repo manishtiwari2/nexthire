@@ -43,20 +43,15 @@ import {
 } from '../shared/components/ui';
 
 /**
- * Admin user management: search, inspect, enable/disable, change role, force a password
- * reset, clear a lockout, and revoke sessions.
+ * Admin user management: search, inspect, enable/disable, force a password reset, clear a
+ * lockout, and revoke sessions.
  *
- * Two rules are surfaced rather than hidden, because the server enforces them and a UI that
- * pretends otherwise just produces confusing errors:
- *  • ADMIN comes from the server's ADMIN_EMAILS config, so it cannot be granted or removed
- *    here — the role select omits it for everyone else and is locked for configured admins.
- *  • An admin cannot act on their own account.
+ * Role is shown, not edited. ADMIN is granted entirely by the server's ADMIN_EMAILS config
+ * and re-derived on every sign-in, so there is nothing a role picker here could change that
+ * the next login would not immediately undo. (There used to be one; with only ADMIN and USER
+ * left it could only ever return "already USER" or a 409.) An admin also cannot act on their
+ * own account.
  */
-
-const ROLE_OPTIONS = [
-  { value: 'USER', label: 'User' },
-  { value: 'INTERVIEWER', label: 'Interviewer' },
-];
 
 function formatRelative(value: string | null | undefined): string {
   if (!value) return 'never';
@@ -126,15 +121,6 @@ export const AdminUsersPage: React.FC = () => {
     onError: onMutationError('Could not update account'),
   });
 
-  const roleMutation = useMutation({
-    mutationFn: ({ id, nextRole }: { id: string; nextRole: string }) => authApi.adminSetUserRole(id, nextRole),
-    onSuccess: (result) => {
-      addToast('Role changed', result.message, 'success');
-      invalidate();
-    },
-    onError: onMutationError('Could not change role'),
-  });
-
   const resetMutation = useMutation({
     mutationFn: (id: string) => authApi.adminSendPasswordReset(id),
     onSuccess: (result) => {
@@ -164,7 +150,6 @@ export const AdminUsersPage: React.FC = () => {
 
   const anyPending =
     statusMutation.isPending ||
-    roleMutation.isPending ||
     resetMutation.isPending ||
     unlockMutation.isPending ||
     revokeMutation.isPending;
@@ -241,7 +226,6 @@ export const AdminUsersPage: React.FC = () => {
           >
             <option value="">All roles</option>
             <option value="USER">User</option>
-            <option value="INTERVIEWER">Interviewer</option>
             <option value="ADMIN">Admin</option>
           </Select>
           <Select
@@ -332,18 +316,7 @@ export const AdminUsersPage: React.FC = () => {
                               <ShieldCheck className="h-3 w-3" /> Admin
                             </Badge>
                           ) : (
-                            <Select
-                              className="h-8 text-xs"
-                              value={user.role}
-                              disabled={isSelf || anyPending}
-                              onChange={(event) => roleMutation.mutate({ id: user.id, nextRole: event.target.value })}
-                            >
-                              {ROLE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </Select>
+                            <Badge variant="default">User</Badge>
                           )}
                         </TD>
 
