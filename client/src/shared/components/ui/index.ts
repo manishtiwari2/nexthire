@@ -12,6 +12,8 @@ export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 export type { CardProps } from './Card';
 export { Badge, DifficultyBadge } from './Badge';
 export type { BadgeProps, BadgeVariant } from './Badge';
+export { Avatar } from './Avatar';
+export type { AvatarProps, AvatarSize } from './Avatar';
 export { Alert } from './Alert';
 export type { AlertProps, AlertVariant } from './Alert';
 export { Skeleton, SkeletonCard } from './Skeleton';

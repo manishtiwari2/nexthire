@@ -191,3 +191,18 @@
   background: var(--color-on-surface-muted);
   background-clip: content-box;
 }
+
+/* ---- Reduced motion ------------------------------------------------------ */
+/* Honor the OS "reduce motion" preference: near-instant animations/transitions so page
+   entrances (fade/slide/scale) and the skeleton shimmer don't move for users who ask for
+   stillness, while the UI still ends in the same final state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

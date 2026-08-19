@@ -25,7 +25,6 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 
-import { AppLayout } from '../components/layout/AppLayout';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { PasswordField } from '../features/auth/components/PasswordField';
@@ -42,6 +41,7 @@ import { isApiError } from '../api/client';
 import type { AuthSession, SecurityEvent } from '../features/auth/types';
 import {
   Alert,
+  Avatar,
   Badge,
   Button,
   Card,
@@ -140,41 +140,39 @@ export const ProfilePage: React.FC = () => {
   if (!user) return null;
 
   return (
-    <AppLayout title="Account settings">
-      <div className="space-y-6">
-        <ProfileHeader />
+    <div className="space-y-6">
+      <ProfileHeader />
 
-        <Tabs
-          items={[
-            { value: 'profile', label: 'Profile' },
-            { value: 'security', label: 'Security' },
-            { value: 'devices', label: 'Devices' },
-            { value: 'activity', label: 'Activity' },
-          ]}
-          value={tab}
-          onChange={setTab}
-          className="border-b border-outline-variant"
-        />
+      <Tabs
+        items={[
+          { value: 'profile', label: 'Profile' },
+          { value: 'security', label: 'Security' },
+          { value: 'devices', label: 'Devices' },
+          { value: 'activity', label: 'Activity' },
+        ]}
+        value={tab}
+        onChange={setTab}
+        className="border-b border-outline-variant"
+      />
 
-        {tab === 'profile' && <ProfileDetailsSection />}
-        {tab === 'security' && <SecuritySection />}
-        {tab === 'devices' && <DevicesSection />}
-        {tab === 'activity' && <ActivitySection />}
-      </div>
-    </AppLayout>
+      {tab === 'profile' && <ProfileDetailsSection />}
+      {tab === 'security' && <SecuritySection />}
+      {tab === 'devices' && <DevicesSection />}
+      {tab === 'activity' && <ActivitySection />}
+    </div>
   );
 
   // ---- Header ----
   function ProfileHeader() {
-    const avatar = user!.avatar || user!.avatarUrl || '';
     const roleLabel = user!.role === 'ADMIN' ? 'Administrator' : 'Member';
 
     return (
       <Card className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        <img
-          src={avatar}
-          alt=""
-          className="h-16 w-16 shrink-0 rounded-2xl border border-outline-variant bg-surface-container object-cover"
+        <Avatar
+          src={user!.avatar || user!.avatarUrl}
+          name={user!.name}
+          email={user!.email}
+          className="h-16 w-16 shrink-0 rounded-2xl text-xl"
         />
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">

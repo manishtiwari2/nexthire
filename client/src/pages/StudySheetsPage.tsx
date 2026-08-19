@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Plus, X } from 'lucide-react';
-import { AppLayout } from '../components/layout/AppLayout';
 import { SectionHeader, Button, Input, Textarea, Card, Skeleton, EmptyState } from '../shared/components/ui';
 import { SheetCard } from '../features/library/components/SheetCard';
 import { fetchSheets, createSheet } from '../features/library/api';
@@ -58,7 +57,7 @@ export const StudySheetsPage: React.FC = () => {
   const custom = sheets.filter((s) => s.kind === 'CUSTOM');
 
   return (
-    <AppLayout>
+    <>
       <div className="space-y-6">
         <SectionHeader
           icon={<ListChecks />}
@@ -103,6 +102,6 @@ export const StudySheetsPage: React.FC = () => {
       </div>
 
       {showCreate && <CreateSheetModal onClose={() => setShowCreate(false)} />}
-    </AppLayout>
+    </>
   );
 };

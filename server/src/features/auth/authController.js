@@ -54,10 +54,6 @@ function ok(res, data, status = 200) {
   return res.status(status).json({ success: true, data });
 }
 
-function defaultAvatar(email) {
-  return `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(email)}`;
-}
-
 /**
  * The role a user should have right now.
  *
@@ -173,7 +169,8 @@ async function register(req, res, next) {
           passwordHash,
           passwordChangedAt: new Date(),
           role,
-          avatarUrl: defaultAvatar(email),
+          // No fabricated avatar — a user with no real photo renders as initials on the client.
+          avatarUrl: null,
           emailVerified: false,
           // Legacy column: keep it in step with emailVerified for older readers.
           isVerified: false,
@@ -557,7 +554,8 @@ async function upsertOAuthUser(providerKey, profile, context) {
         email: profile.email,
         name: profile.name || profile.email.split('@')[0],
         [idColumn]: providerUserId,
-        avatarUrl: profile.picture || defaultAvatar(profile.email),
+        // Keep the real provider photo when present; otherwise leave it null (client shows initials).
+        avatarUrl: profile.picture || null,
         role: roleForEmail(profile.email),
         // The provider has verified the address; there is nothing left for us to verify.
         emailVerified: true,
@@ -599,7 +597,7 @@ async function upsertOAuthUser(providerKey, profile, context) {
       emailVerifiedAt: existing.emailVerifiedAt || now,
       isVerified: true,
       // Only fill the avatar in; never overwrite one the user chose.
-      avatarUrl: existing.avatarUrl || profile.picture || defaultAvatar(existing.email),
+      avatarUrl: existing.avatarUrl || profile.picture || null,
       role: reconcileRole(existing),
       failedLoginAttempts: 0,
       lockedUntil: null,

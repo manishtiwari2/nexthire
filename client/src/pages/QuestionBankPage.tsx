@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { AppLayout } from '../components/layout/AppLayout';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { QuestionFilterBar } from '../features/question-bank/components/QuestionFilterBar';
@@ -55,51 +54,49 @@ export const QuestionBankPage: React.FC = () => {
   const topics = (topicsData as any)?.data || [];
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <SectionHeader
-          icon={<Database />}
-          title="Question Bank"
-          description="Practice top interview DSA questions categorized by topics and difficulty."
-          actions={
-            isAdmin && (
-              <Link to="/admin/questions/create">
-                <Button
-                  variant="primary"
-                  leftIcon={<Plus className="h-4 w-4" />}
-                  className="bg-tertiary text-white hover:bg-tertiary/90"
-                >
-                  Add Question (Admin)
-                </Button>
-              </Link>
-            )
-          }
-        />
+    <div className="space-y-6">
+      <SectionHeader
+        icon={<Database />}
+        title="Question Bank"
+        description="Practice top interview DSA questions categorized by topics and difficulty."
+        actions={
+          isAdmin && (
+            <Link to="/admin/questions/create">
+              <Button
+                variant="primary"
+                leftIcon={<Plus className="h-4 w-4" />}
+                className="bg-tertiary text-white hover:bg-tertiary/90"
+              >
+                Add Question (Admin)
+              </Button>
+            </Link>
+          )
+        }
+      />
 
-        {/* Filter Bar */}
-        <QuestionFilterBar
-          search={search}
-          onSearchChange={(val) => { setSearch(val); setPage(1); }}
-          difficulty={difficulty}
-          onDifficultyChange={(val) => { setDifficulty(val); setPage(1); }}
-          topicId={topicId}
-          onTopicChange={(val) => { setTopicId(val); setPage(1); }}
-          topics={topics}
-          solvable={solvable}
-          onSolvableChange={(val) => { setSolvable(val); setPage(1); }}
-          page={page}
-          totalPages={pagination.totalPages}
-          onPageChange={(p) => setPage(p)}
-        />
+      {/* Filter Bar */}
+      <QuestionFilterBar
+        search={search}
+        onSearchChange={(val) => { setSearch(val); setPage(1); }}
+        difficulty={difficulty}
+        onDifficultyChange={(val) => { setDifficulty(val); setPage(1); }}
+        topicId={topicId}
+        onTopicChange={(val) => { setTopicId(val); setPage(1); }}
+        topics={topics}
+        solvable={solvable}
+        onSolvableChange={(val) => { setSolvable(val); setPage(1); }}
+        page={page}
+        totalPages={pagination.totalPages}
+        onPageChange={(p) => setPage(p)}
+      />
 
-        {/* Question Table */}
-        <QuestionTable
-          questions={questions}
-          isLoading={isLoading}
-          isAdmin={isAdmin}
-          onDeleteQuestion={(id) => deleteMutation.mutate(id)}
-        />
-      </div>
-    </AppLayout>
+      {/* Question Table */}
+      <QuestionTable
+        questions={questions}
+        isLoading={isLoading}
+        isAdmin={isAdmin}
+        onDeleteQuestion={(id) => deleteMutation.mutate(id)}
+      />
+    </div>
   );
 };

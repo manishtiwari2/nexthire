@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { AppLayout } from '../components/layout/AppLayout';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import {
@@ -102,177 +101,173 @@ export const AdminCreateContestPage: React.FC = () => {
   // Success screen: show the join code + let the host enter the live IDE.
   if (joinCode || createdContestId) {
     return (
-      <AppLayout>
-        <div className="mx-auto max-w-2xl">
-          <Card className="space-y-5 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-success-container text-success">
-              <CheckCircle2 className="h-7 w-7" />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold text-on-surface">Assessment Created</h1>
-              <p className="text-sm text-on-surface-variant">
-                Share this join code with participants so they can enter the live IDE.
-              </p>
-            </div>
+      <div className="mx-auto max-w-2xl">
+        <Card className="space-y-5 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-success-container text-success">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold text-on-surface">Assessment Created</h1>
+            <p className="text-sm text-on-surface-variant">
+              Share this join code with participants so they can enter the live IDE.
+            </p>
+          </div>
 
-            {joinCode && (
-              <div className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-high px-6 py-3 font-mono text-xl font-bold tracking-widest text-on-surface">
-                <Key className="h-5 w-5 text-warning" /> {joinCode}
-              </div>
-            )}
+          {joinCode && (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-high px-6 py-3 font-mono text-xl font-bold tracking-widest text-on-surface">
+              <Key className="h-5 w-5 text-warning" /> {joinCode}
+            </div>
+          )}
 
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <Button variant="outline" onClick={() => navigate('/contests')}>
-                Back to Assessments
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button variant="outline" onClick={() => navigate('/contests')}>
+              Back to Assessments
+            </Button>
+            {createdContestId && (
+              <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => navigate(`/contest/${createdContestId}`)}>
+                Enter Contest IDE
               </Button>
-              {createdContestId && (
-                <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => navigate(`/contest/${createdContestId}`)}>
-                  Enter Contest IDE
-                </Button>
-              )}
-            </div>
-          </Card>
-        </div>
-      </AppLayout>
+            )}
+          </div>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="mx-auto max-w-3xl space-y-6">
-        <SectionHeader
-          icon={<Trophy />}
-          title="Create New Assessment"
-          description="Configure a timed coding contest, pick its questions, and generate a join code."
-        />
+    <div className="mx-auto max-w-3xl space-y-6">
+      <SectionHeader
+        icon={<Trophy />}
+        title="Create New Assessment"
+        description="Configure a timed coding contest, pick its questions, and generate a join code."
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic details */}
-          <Card className="space-y-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
-              <FileText className="h-4 w-4 text-primary" /> Assessment Details
-            </h3>
-            <Input
-              label="Assessment Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Backend Engineer Screen — Round 1"
-              required
-            />
-            <Textarea
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What this assessment covers and any instructions for candidates."
-              required
-            />
-          </Card>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic details */}
+        <Card className="space-y-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <FileText className="h-4 w-4 text-primary" /> Assessment Details
+          </h3>
+          <Input
+            label="Assessment Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Backend Engineer Screen — Round 1"
+            required
+          />
+          <Textarea
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What this assessment covers and any instructions for candidates."
+            required
+          />
+        </Card>
 
-          {/* Timing */}
-          <Card className="space-y-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
-              <Clock className="h-4 w-4 text-primary" /> Duration & Start
-            </h3>
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                fullWidth
-                variant={startMode === 'now' ? 'primary' : 'outline'}
-                onClick={() => setStartMode('now')}
-              >
-                Start Now
-              </Button>
-              <Button
-                type="button"
-                fullWidth
-                variant={startMode === 'schedule' ? 'primary' : 'outline'}
-                onClick={() => setStartMode('schedule')}
-              >
-                Schedule
-              </Button>
-            </div>
-
-            {startMode === 'schedule' && (
-              <Input
-                type="datetime-local"
-                label="Start Date & Time"
-                value={scheduledStart}
-                onChange={(e) => setScheduledStart(e.target.value)}
-              />
-            )}
-
-            <Input
-              type="number"
-              min={1}
-              label="Duration (minutes)"
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 0)}
-              hint={`The contest ends automatically ${durationMinutes || 0} minutes after it starts.`}
-            />
-          </Card>
-
-          {/* Question selection */}
-          <Card className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
-                <ListChecks className="h-4 w-4 text-primary" /> Select Questions
-              </h3>
-              <span className="text-xs font-semibold text-primary">{selected.length} selected</span>
-            </div>
-
-            {questionsLoading ? (
-              <div className="py-6">
-                <Spinner label="Loading questions…" />
-              </div>
-            ) : questions.length === 0 ? (
-              <EmptyState
-                icon={<Database />}
-                title="No questions yet"
-                description="No questions in the bank yet. Create a question first."
-                action={<Button onClick={() => navigate('/admin/questions/create')}>Create Question</Button>}
-              />
-            ) : (
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {questions.map((q: any) => {
-                  const checked = selected.includes(q.id);
-                  return (
-                    <label
-                      key={q.id}
-                      className={cn(
-                        'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all',
-                        checked
-                          ? 'border-primary bg-primary/10'
-                          : 'border-outline-variant hover:bg-surface-container-high'
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleQuestion(q.id)}
-                        className="h-4 w-4 accent-primary"
-                      />
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-on-surface">{q.title}</p>
-                        <p className="text-[11px] text-on-surface-variant">{q.topic?.name || 'Algorithms'}</p>
-                      </div>
-                      <DifficultyBadge difficulty={q.difficulty} />
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-
-          <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate('/contests')}>
-              Cancel
+        {/* Timing */}
+        <Card className="space-y-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <Clock className="h-4 w-4 text-primary" /> Duration & Start
+          </h3>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              fullWidth
+              variant={startMode === 'now' ? 'primary' : 'outline'}
+              onClick={() => setStartMode('now')}
+            >
+              Start Now
             </Button>
-            <Button type="submit" size="lg" isLoading={createMutation.isPending} leftIcon={<Trophy className="h-4 w-4" />}>
-              Create Assessment
+            <Button
+              type="button"
+              fullWidth
+              variant={startMode === 'schedule' ? 'primary' : 'outline'}
+              onClick={() => setStartMode('schedule')}
+            >
+              Schedule
             </Button>
           </div>
-        </form>
-      </div>
-    </AppLayout>
+
+          {startMode === 'schedule' && (
+            <Input
+              type="datetime-local"
+              label="Start Date & Time"
+              value={scheduledStart}
+              onChange={(e) => setScheduledStart(e.target.value)}
+            />
+          )}
+
+          <Input
+            type="number"
+            min={1}
+            label="Duration (minutes)"
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10) || 0)}
+            hint={`The contest ends automatically ${durationMinutes || 0} minutes after it starts.`}
+          />
+        </Card>
+
+        {/* Question selection */}
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+              <ListChecks className="h-4 w-4 text-primary" /> Select Questions
+            </h3>
+            <span className="text-xs font-semibold text-primary">{selected.length} selected</span>
+          </div>
+
+          {questionsLoading ? (
+            <div className="py-6">
+              <Spinner label="Loading questions…" />
+            </div>
+          ) : questions.length === 0 ? (
+            <EmptyState
+              icon={<Database />}
+              title="No questions yet"
+              description="No questions in the bank yet. Create a question first."
+              action={<Button onClick={() => navigate('/admin/questions/create')}>Create Question</Button>}
+            />
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {questions.map((q: any) => {
+                const checked = selected.includes(q.id);
+                return (
+                  <label
+                    key={q.id}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all',
+                      checked
+                        ? 'border-primary bg-primary/10'
+                        : 'border-outline-variant hover:bg-surface-container-high'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleQuestion(q.id)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-on-surface">{q.title}</p>
+                      <p className="text-[11px] text-on-surface-variant">{q.topic?.name || '—'}</p>
+                    </div>
+                    <DifficultyBadge difficulty={q.difficulty} />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <div className="flex items-center justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => navigate('/contests')}>
+            Cancel
+          </Button>
+          <Button type="submit" size="lg" isLoading={createMutation.isPending} leftIcon={<Trophy className="h-4 w-4" />}>
+            Create Assessment
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 };

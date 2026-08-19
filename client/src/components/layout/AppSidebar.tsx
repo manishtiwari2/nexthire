@@ -4,17 +4,17 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { Trophy, Database, PlusCircle, ShieldCheck, Terminal, Sparkles, X, Library, ListChecks, Dumbbell, TrendingUp, LayoutDashboard, RotateCcw, Users } from 'lucide-react';
 import { cn } from '../../shared/lib/cn';
 
-interface NavItem {
+export interface NavItem {
   name: string;
   path: string;
   icon: React.ElementType;
 }
 
-const homeNav: NavItem[] = [
+export const homeNav: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
 ];
 
-const libraryNav: NavItem[] = [
+export const libraryNav: NavItem[] = [
   { name: 'Question Library', path: '/library', icon: Library },
   { name: 'Study Sheets', path: '/sheets', icon: ListChecks },
   { name: 'Practice', path: '/practice', icon: Dumbbell },
@@ -22,16 +22,44 @@ const libraryNav: NavItem[] = [
   { name: 'My Progress', path: '/progress', icon: TrendingUp },
 ];
 
-const candidateNav: NavItem[] = [
+export const candidateNav: NavItem[] = [
   { name: 'Assessments', path: '/contests', icon: Trophy },
   { name: 'Question Bank', path: '/questions', icon: Database },
 ];
 
-const adminNav: NavItem[] = [
+export const adminNav: NavItem[] = [
   { name: 'Create Question', path: '/admin/questions/create', icon: Database },
   { name: 'Create Assessment', path: '/admin/contests/create', icon: PlusCircle },
   { name: 'User Management', path: '/admin/users', icon: Users },
 ];
+
+/** Pages that have no sidebar entry but still need a title in the header bar. */
+const extraTitles: Record<string, string> = {
+  '/profile': 'Account settings',
+};
+
+const allNavItems: NavItem[] = [...homeNav, ...libraryNav, ...candidateNav, ...adminNav];
+
+/**
+ * Resolve the header title for a pathname, so the header can derive its own label from the
+ * route instead of every page passing a `title` prop. Matches the most specific nav entry —
+ * the longest path that is the pathname itself or a parent of it — so detail routes like
+ * `/sheets/:slug` inherit their section's label. Returns '' when nothing matches (the header
+ * then simply shows no title, as most pages did before).
+ */
+export function getPageTitle(pathname: string): string {
+  if (extraTitles[pathname]) return extraTitles[pathname];
+  let best = '';
+  let bestLen = -1;
+  for (const item of allNavItems) {
+    const isMatch = pathname === item.path || pathname.startsWith(`${item.path}/`);
+    if (isMatch && item.path.length > bestLen) {
+      best = item.name;
+      bestLen = item.path.length;
+    }
+  }
+  return best;
+}
 
 const NavSection: React.FC<{ label: React.ReactNode; items: NavItem[]; onNavigate?: () => void }> = ({
   label,

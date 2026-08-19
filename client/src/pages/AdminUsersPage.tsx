@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react';
 
-import { AppLayout } from '../components/layout/AppLayout';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { useAuthStore } from '../store/useAuthStore';
 import * as authApi from '../features/auth/api';
@@ -24,6 +23,7 @@ import { isApiError } from '../api/client';
 import type { AdminUser } from '../features/auth/types';
 import {
   Alert,
+  Avatar,
   Badge,
   Button,
   Card,
@@ -168,299 +168,299 @@ export const AdminUsersPage: React.FC = () => {
   };
 
   return (
-    <AppLayout title="User management">
-      <div className="space-y-6">
-        <SectionHeader
-          icon={<Users />}
-          title="User management"
-          description="Search accounts, manage access, and review authentication activity."
+    <div className="space-y-6">
+      <SectionHeader
+        icon={<Users />}
+        title="User management"
+        description="Search accounts, manage access, and review authentication activity."
+      />
+
+      {/* ---- Headline numbers ---- */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {analyticsQuery.isLoading
+          ? Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 w-full rounded-2xl" />)
+          : analytics && (
+              <>
+                <StatCard label="Total users" value={analytics.users.total} icon={<Users />} />
+                <StatCard
+                  label="Active today"
+                  value={analytics.users.activeToday}
+                  icon={<Activity />}
+                  hint={`${analytics.sessions.live} live session(s)`}
+                />
+                <StatCard
+                  label="Unverified"
+                  value={analytics.users.unverified}
+                  icon={<KeyRound />}
+                  hint={`${analytics.users.disabled} disabled`}
+                />
+                <StatCard
+                  label="Failed logins (24h)"
+                  value={analytics.security.failedLoginsLast24h}
+                  icon={<Ban />}
+                  hint={`${analytics.users.admins} admin(s)`}
+                />
+              </>
+            )}
+      </div>
+
+      {/* ---- Filters ---- */}
+      <Card className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Input
+          containerClassName="flex-1"
+          label="Search"
+          placeholder="Name, email or mobile…"
+          icon={<Search className="h-4 w-4" />}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
         />
+        <Select
+          containerClassName="sm:w-44"
+          label="Role"
+          value={role}
+          onChange={(event) => {
+            setRole(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">All roles</option>
+          <option value="USER">User</option>
+          <option value="ADMIN">Admin</option>
+        </Select>
+        <Select
+          containerClassName="sm:w-44"
+          label="Status"
+          value={status}
+          onChange={(event) => {
+            setStatus(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="disabled">Disabled</option>
+          <option value="unverified">Unverified</option>
+        </Select>
+        {hasFilters && (
+          <Button type="button" variant="ghost" onClick={clearFilters} leftIcon={<X className="h-4 w-4" />}>
+            Clear
+          </Button>
+        )}
+      </Card>
 
-        {/* ---- Headline numbers ---- */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {analyticsQuery.isLoading
-            ? Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 w-full rounded-2xl" />)
-            : analytics && (
-                <>
-                  <StatCard label="Total users" value={analytics.users.total} icon={<Users />} />
-                  <StatCard
-                    label="Active today"
-                    value={analytics.users.activeToday}
-                    icon={<Activity />}
-                    hint={`${analytics.sessions.live} live session(s)`}
-                  />
-                  <StatCard
-                    label="Unverified"
-                    value={analytics.users.unverified}
-                    icon={<KeyRound />}
-                    hint={`${analytics.users.disabled} disabled`}
-                  />
-                  <StatCard
-                    label="Failed logins (24h)"
-                    value={analytics.security.failedLoginsLast24h}
-                    icon={<Ban />}
-                    hint={`${analytics.users.admins} admin(s)`}
-                  />
-                </>
-              )}
-        </div>
+      {/* ---- Table ---- */}
+      {listQuery.isError && <Alert variant="danger">Could not load users. Refresh to try again.</Alert>}
 
-        {/* ---- Filters ---- */}
-        <Card className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <Input
-            containerClassName="flex-1"
-            label="Search"
-            placeholder="Name, email or mobile…"
-            icon={<Search className="h-4 w-4" />}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Select
-            containerClassName="sm:w-44"
-            label="Role"
-            value={role}
-            onChange={(event) => {
-              setRole(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All roles</option>
-            <option value="USER">User</option>
-            <option value="ADMIN">Admin</option>
-          </Select>
-          <Select
-            containerClassName="sm:w-44"
-            label="Status"
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All statuses</option>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
-            <option value="unverified">Unverified</option>
-          </Select>
-          {hasFilters && (
-            <Button type="button" variant="ghost" onClick={clearFilters} leftIcon={<X className="h-4 w-4" />}>
-              Clear
-            </Button>
-          )}
+      {listQuery.isLoading ? (
+        <Card className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </Card>
+      ) : users.length === 0 ? (
+        <EmptyState
+          icon={<Users />}
+          title="No users found"
+          description={hasFilters ? 'Try a different search or clear the filters.' : 'No accounts exist yet.'}
+          action={
+            hasFilters ? (
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <TableContainer>
+          <Table>
+            <THead>
+              <TR>
+                <TH>User</TH>
+                <TH>Role</TH>
+                <TH>Status</TH>
+                <TH>Last active</TH>
+                <TH className="text-right">Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {users.map((user: AdminUser) => {
+                const isSelf = user.id === currentUser?.id;
+                const isAdminRole = user.role === 'ADMIN';
+                const expanded = expandedId === user.id;
 
-        {/* ---- Table ---- */}
-        {listQuery.isError && <Alert variant="danger">Could not load users. Refresh to try again.</Alert>}
-
-        {listQuery.isLoading ? (
-          <Card className="space-y-3">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </Card>
-        ) : users.length === 0 ? (
-          <EmptyState
-            icon={<Users />}
-            title="No users found"
-            description={hasFilters ? 'Try a different search or clear the filters.' : 'No accounts exist yet.'}
-            action={
-              hasFilters ? (
-                <Button type="button" variant="secondary" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <THead>
-                <TR>
-                  <TH>User</TH>
-                  <TH>Role</TH>
-                  <TH>Status</TH>
-                  <TH>Last active</TH>
-                  <TH className="text-right">Actions</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {users.map((user: AdminUser) => {
-                  const isSelf = user.id === currentUser?.id;
-                  const isAdminRole = user.role === 'ADMIN';
-                  const expanded = expandedId === user.id;
-
-                  return (
-                    <React.Fragment key={user.id}>
-                      <TR>
-                        <TD>
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={user.avatar || user.avatarUrl || ''}
-                              alt=""
-                              className="h-8 w-8 shrink-0 rounded-lg border border-outline-variant bg-surface-container object-cover"
-                            />
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-on-surface">
-                                {user.name}
-                                {isSelf && <span className="ml-1.5 text-xs font-normal text-on-surface-muted">(you)</span>}
-                              </p>
-                              <p className="truncate text-xs text-on-surface-variant">{user.email}</p>
-                              {user.mobile && <p className="truncate text-xs text-on-surface-muted">{user.mobile}</p>}
-                            </div>
+                return (
+                  <React.Fragment key={user.id}>
+                    <TR>
+                      <TD>
+                        <div className="flex items-center gap-3">
+                          <Avatar
+                            src={user.avatar || user.avatarUrl}
+                            name={user.name}
+                            email={user.email}
+                            size="sm"
+                            className="shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-on-surface">
+                              {user.name}
+                              {isSelf && <span className="ml-1.5 text-xs font-normal text-on-surface-muted">(you)</span>}
+                            </p>
+                            <p className="truncate text-xs text-on-surface-variant">{user.email}</p>
+                            {user.mobile && <p className="truncate text-xs text-on-surface-muted">{user.mobile}</p>}
                           </div>
-                        </TD>
+                        </div>
+                      </TD>
 
-                        <TD>
-                          {isAdminRole ? (
-                            <Badge variant="accent">
-                              <ShieldCheck className="h-3 w-3" /> Admin
-                            </Badge>
+                      <TD>
+                        {isAdminRole ? (
+                          <Badge variant="accent">
+                            <ShieldCheck className="h-3 w-3" /> Admin
+                          </Badge>
+                        ) : (
+                          <Badge variant="default">User</Badge>
+                        )}
+                      </TD>
+
+                      <TD>
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.isActive ? (
+                            <Badge variant="success">Active</Badge>
                           ) : (
-                            <Badge variant="default">User</Badge>
+                            <Badge variant="danger">Disabled</Badge>
                           )}
-                        </TD>
+                          {!user.emailVerified && <Badge variant="warning">Unverified</Badge>}
+                          {user.isLocked && (
+                            <Badge variant="danger">
+                              <Lock className="h-3 w-3" /> Locked
+                            </Badge>
+                          )}
+                          {user.googleLinked && <Badge variant="default">Google</Badge>}
+                          {user.githubLinked && <Badge variant="default">GitHub</Badge>}
+                        </div>
+                      </TD>
 
-                        <TD>
-                          <div className="flex flex-wrap gap-1.5">
-                            {user.isActive ? (
-                              <Badge variant="success">Active</Badge>
-                            ) : (
-                              <Badge variant="danger">Disabled</Badge>
-                            )}
-                            {!user.emailVerified && <Badge variant="warning">Unverified</Badge>}
-                            {user.isLocked && (
-                              <Badge variant="danger">
-                                <Lock className="h-3 w-3" /> Locked
-                              </Badge>
-                            )}
-                            {user.googleLinked && <Badge variant="default">Google</Badge>}
-                            {user.githubLinked && <Badge variant="default">GitHub</Badge>}
-                          </div>
-                        </TD>
+                      <TD>
+                        <p className="text-xs text-on-surface-variant">{formatRelative(user.lastActive)}</p>
+                        <p className="text-[11px] text-on-surface-muted">
+                          {user.activeSessionCount ?? 0} session(s)
+                        </p>
+                      </TD>
 
-                        <TD>
-                          <p className="text-xs text-on-surface-variant">{formatRelative(user.lastActive)}</p>
-                          <p className="text-[11px] text-on-surface-muted">
-                            {user.activeSessionCount ?? 0} session(s)
-                          </p>
-                        </TD>
+                      <TD className="text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedId(expanded ? null : user.id)}
+                          >
+                            {expanded ? 'Hide' : 'History'}
+                          </Button>
 
-                        <TD className="text-right">
-                          <div className="flex justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setExpandedId(expanded ? null : user.id)}
-                            >
-                              {expanded ? 'Hide' : 'History'}
-                            </Button>
-
-                            {user.isLocked && (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={anyPending}
-                                onClick={() => unlockMutation.mutate(user.id)}
-                                leftIcon={<Unlock className="h-3.5 w-3.5" />}
-                              >
-                                Unlock
-                              </Button>
-                            )}
-
+                          {user.isLocked && (
                             <Button
                               type="button"
                               variant="secondary"
                               size="sm"
                               disabled={anyPending}
-                              onClick={() => resetMutation.mutate(user.id)}
-                              leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+                              onClick={() => unlockMutation.mutate(user.id)}
+                              leftIcon={<Unlock className="h-3.5 w-3.5" />}
                             >
-                              Reset
+                              Unlock
                             </Button>
+                          )}
 
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={anyPending || (user.activeSessionCount ?? 0) === 0}
-                              onClick={() => revokeMutation.mutate(user.id)}
-                              leftIcon={<LogOut className="h-3.5 w-3.5" />}
-                            >
-                              Revoke
-                            </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={anyPending}
+                            onClick={() => resetMutation.mutate(user.id)}
+                            leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+                          >
+                            Reset
+                          </Button>
 
-                            <Button
-                              type="button"
-                              variant={user.isActive ? 'danger' : 'primary'}
-                              size="sm"
-                              disabled={isSelf || anyPending}
-                              title={isSelf ? 'You cannot disable your own account' : undefined}
-                              onClick={() =>
-                                statusMutation.mutate({
-                                  id: user.id,
-                                  isActive: !user.isActive,
-                                  reason: user.isActive ? 'Disabled by an administrator' : undefined,
-                                })
-                              }
-                              leftIcon={
-                                user.isActive ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />
-                              }
-                            >
-                              {user.isActive ? 'Disable' : 'Enable'}
-                            </Button>
-                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={anyPending || (user.activeSessionCount ?? 0) === 0}
+                            onClick={() => revokeMutation.mutate(user.id)}
+                            leftIcon={<LogOut className="h-3.5 w-3.5" />}
+                          >
+                            Revoke
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant={user.isActive ? 'danger' : 'primary'}
+                            size="sm"
+                            disabled={isSelf || anyPending}
+                            title={isSelf ? 'You cannot disable your own account' : undefined}
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: user.id,
+                                isActive: !user.isActive,
+                                reason: user.isActive ? 'Disabled by an administrator' : undefined,
+                              })
+                            }
+                            leftIcon={
+                              user.isActive ? <Ban className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />
+                            }
+                          >
+                            {user.isActive ? 'Disable' : 'Enable'}
+                          </Button>
+                        </div>
+                      </TD>
+                    </TR>
+
+                    {expanded && (
+                      <TR>
+                        <TD colSpan={5} className="bg-surface-container-low">
+                          <LoginHistory userId={user.id} disabledReason={user.disabledReason} />
                         </TD>
                       </TR>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </TBody>
+          </Table>
+        </TableContainer>
+      )}
 
-                      {expanded && (
-                        <TR>
-                          <TD colSpan={5} className="bg-surface-container-low">
-                            <LoginHistory userId={user.id} disabledReason={user.disabledReason} />
-                          </TD>
-                        </TR>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </TBody>
-            </Table>
-          </TableContainer>
-        )}
-
-        {/* ---- Pagination ---- */}
-        {pagination && pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-on-surface-variant">
-              Page {pagination.page} of {pagination.totalPages} · {pagination.total} user(s)
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                leftIcon={<ChevronLeft className="h-4 w-4" />}
-              >
-                Previous
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={page >= pagination.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                rightIcon={<ChevronRight className="h-4 w-4" />}
-              >
-                Next
-              </Button>
-            </div>
+      {/* ---- Pagination ---- */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-xs text-on-surface-variant">
+            Page {pagination.page} of {pagination.totalPages} · {pagination.total} user(s)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              leftIcon={<ChevronLeft className="h-4 w-4" />}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={page >= pagination.totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              rightIcon={<ChevronRight className="h-4 w-4" />}
+            >
+              Next
+            </Button>
           </div>
-        )}
-      </div>
-    </AppLayout>
+        </div>
+      )}
+    </div>
   );
 };
 

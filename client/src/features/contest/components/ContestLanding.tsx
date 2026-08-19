@@ -4,7 +4,7 @@ import {
   Trophy, Clock, Users, ListChecks, ArrowLeft, ArrowRight, ShieldCheck, Zap,
   CheckCircle2, Play,
 } from 'lucide-react';
-import { Card, Badge, Button, DifficultyBadge } from '../../../shared/components/ui';
+import { Avatar, Card, Badge, Button, DifficultyBadge } from '../../../shared/components/ui';
 import { cn } from '../../../shared/lib/cn';
 import { formatRemaining } from '../format';
 
@@ -51,7 +51,9 @@ export const ContestLanding: React.FC<ContestLandingProps> = ({
                 {notStarted ? 'STARTS SOON' : 'LIVE NOW'}
               </Badge>
               {alreadyJoined && <Badge variant="success"><CheckCircle2 className="h-3 w-3" /> Registered</Badge>}
-              <span className="text-xs text-on-surface-muted">Hosted by {contest?.host?.name || 'NextHire'}</span>
+              {contest?.host?.name && (
+                <span className="text-xs text-on-surface-muted">Hosted by {contest.host.name}</span>
+              )}
             </div>
             <h1 className="mt-3 text-2xl font-bold tracking-tight text-on-surface">{contest?.title}</h1>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-on-surface-variant">{contest?.description}</p>
@@ -133,11 +135,12 @@ export const ContestLanding: React.FC<ContestLandingProps> = ({
             <div className="flex flex-wrap gap-2">
               {participants.slice(0, 24).map((p, i) => (
                 <span key={p.id || i} className="inline-flex items-center gap-1.5 rounded-full border border-outline-variant bg-surface-container-low py-1 pl-1 pr-3">
-                  <img
-                    src={p.user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(p.user?.name || 'User')}`}
-                    alt="" className="h-6 w-6 rounded-full border border-outline-variant object-cover"
+                  <Avatar
+                    src={p.user?.avatarUrl}
+                    name={p.user?.name}
+                    className="h-6 w-6 rounded-full text-[10px]"
                   />
-                  <span className="text-xs font-medium text-on-surface-variant">{p.user?.name || 'Engineer'}</span>
+                  <span className="text-xs font-medium text-on-surface-variant">{p.user?.name || 'Anonymous'}</span>
                 </span>
               ))}
               {participants.length > 24 && <span className="self-center text-xs text-on-surface-muted">+{participants.length - 24} more</span>}
