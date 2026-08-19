@@ -5,8 +5,7 @@ import {
   RotateCcw, Flame, CheckCircle2, Gauge, AlertTriangle, CalendarClock, PlayCircle,
   X, ExternalLink, ArrowRight, Layers, Clock
 } from 'lucide-react';
-import { AppLayout } from '../components/layout/AppLayout';
-import { SectionHeader, Card, Badge, DifficultyBadge, Button, Spinner, EmptyState, StatCard } from '../shared/components/ui';
+import { SectionHeader, Card, Badge, DifficultyBadge, Button, Skeleton, SkeletonCard, EmptyState, StatCard } from '../shared/components/ui';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotificationStore } from '../store/useNotificationStore';
 import { fetchRevisionState, removeRevision, type RevisionItem } from '../features/revision/api';
@@ -122,51 +121,60 @@ export const RevisionPage: React.FC = () => {
   const dueNow = (data?.overdue.length || 0) + (data?.dueToday.length || 0);
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <SectionHeader
-          icon={<RotateCcw />}
-          title="Revision"
-          description="Spaced repetition keeps solved problems fresh. Solving a problem adds it here automatically."
-          actions={
-            dueNow > 0 ? (
-              <Button leftIcon={<PlayCircle className="h-4 w-4" />} onClick={startRevision}>Start Revision ({dueNow})</Button>
-            ) : undefined
-          }
-        />
+    <div className="space-y-6">
+      <SectionHeader
+        icon={<RotateCcw />}
+        title="Revision"
+        description="Spaced repetition keeps solved problems fresh. Solving a problem adds it here automatically."
+        actions={
+          dueNow > 0 ? (
+            <Button leftIcon={<PlayCircle className="h-4 w-4" />} onClick={startRevision}>Start Revision ({dueNow})</Button>
+          ) : undefined
+        }
+      />
 
-        {isLoading || !data ? (
-          <div className="flex justify-center py-16"><Spinner label="Loading your revision queue…" /></div>
-        ) : stats && stats.totalTracked === 0 ? (
-          <Card>
-            <EmptyState
-              icon={<RotateCcw />}
-              title="Your revision ladder is empty"
-              description="Solve a problem and it's automatically scheduled for spaced-repetition review. You can also rate your confidence on any problem's page to add it."
-              action={<Link to="/practice"><Button leftIcon={<PlayCircle className="h-4 w-4" />}>Start practicing</Button></Link>}
-            />
-          </Card>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard icon={<Flame />} accent="warning" label="Due now" value={stats?.dueCount ?? 0} hint={stats?.overdueCount ? `${stats.overdueCount} overdue` : 'stay on top of it'} />
-              <StatCard icon={<CalendarClock />} accent="info" label="Upcoming" value={stats?.upcomingCount ?? 0} hint="scheduled ahead" />
-              <StatCard icon={<Layers />} accent="primary" label="In rotation" value={stats?.totalTracked ?? 0} hint="total tracked" />
-              <StatCard icon={<Gauge />} accent="success" label="Confidence" value={`${stats?.confidence ?? 0}%`} hint={`avg ease ${stats?.avgEase ?? 0}`} />
-            </div>
+      {isLoading || !data ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+            ))}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        </>
+      ) : stats && stats.totalTracked === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<RotateCcw />}
+            title="Your revision ladder is empty"
+            description="Solve a problem and it's automatically scheduled for spaced-repetition review. You can also rate your confidence on any problem's page to add it."
+            action={<Link to="/practice"><Button leftIcon={<PlayCircle className="h-4 w-4" />}>Start practicing</Button></Link>}
+          />
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard icon={<Flame />} accent="warning" label="Due now" value={stats?.dueCount ?? 0} hint={stats?.overdueCount ? `${stats.overdueCount} overdue` : 'stay on top of it'} />
+            <StatCard icon={<CalendarClock />} accent="info" label="Upcoming" value={stats?.upcomingCount ?? 0} hint="scheduled ahead" />
+            <StatCard icon={<Layers />} accent="primary" label="In rotation" value={stats?.totalTracked ?? 0} hint="total tracked" />
+            <StatCard icon={<Gauge />} accent="success" label="Confidence" value={`${stats?.confidence ?? 0}%`} hint={`avg ease ${stats?.avgEase ?? 0}`} />
+          </div>
 
-            <div className="space-y-6">
-              <Bucket icon={<AlertTriangle />} title="Overdue" tone="danger" items={data.overdue}
-                emptyHint="Nothing overdue — nice discipline." onRemove={removeMutation.mutate} />
-              <Bucket icon={<Clock />} title="Due Today" tone="warning" items={data.dueToday}
-                emptyHint="No reviews due today." onRemove={removeMutation.mutate} />
-              <Bucket icon={<CheckCircle2 />} title="Upcoming" tone="info" items={data.upcoming}
-                emptyHint="No upcoming reviews scheduled yet." onRemove={removeMutation.mutate} />
-            </div>
-          </>
-        )}
-      </div>
-    </AppLayout>
+          <div className="space-y-6">
+            <Bucket icon={<AlertTriangle />} title="Overdue" tone="danger" items={data.overdue}
+              emptyHint="Nothing overdue — nice discipline." onRemove={removeMutation.mutate} />
+            <Bucket icon={<Clock />} title="Due Today" tone="warning" items={data.dueToday}
+              emptyHint="No reviews due today." onRemove={removeMutation.mutate} />
+            <Bucket icon={<CheckCircle2 />} title="Upcoming" tone="info" items={data.upcoming}
+              emptyHint="No upcoming reviews scheduled yet." onRemove={removeMutation.mutate} />
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 

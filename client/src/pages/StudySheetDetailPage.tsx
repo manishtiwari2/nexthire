@@ -3,8 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ListChecks, Trash2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AppLayout } from '../components/layout/AppLayout';
-import { SectionHeader, Spinner, EmptyState, Button, Badge } from '../shared/components/ui';
+import { SectionHeader, Skeleton, EmptyState, Button, Badge } from '../shared/components/ui';
 import { LibraryTable } from '../features/library/components/LibraryTable';
 import { SheetProgressBar } from '../features/library/components/SheetCard';
 import { fetchSheet, deleteSheet } from '../features/library/api';
@@ -41,62 +40,68 @@ export const StudySheetDetailPage: React.FC = () => {
   }
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <Link to="/sheets" className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-on-surface">
-          <ArrowLeft className="h-4 w-4" /> All sheets
-        </Link>
+    <div className="space-y-6">
+      <Link to="/sheets" className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-on-surface">
+        <ArrowLeft className="h-4 w-4" /> All sheets
+      </Link>
 
-        {isLoading ? (
-          <div className="flex justify-center py-16"><Spinner label="Loading sheet…" /></div>
-        ) : !sheet ? (
-          <EmptyState icon={<ListChecks />} title="Sheet not found" description="This sheet may have been removed or is private." />
-        ) : (
-          <>
-            <SectionHeader
-              icon={<ListChecks />}
-              title={sheet.name}
-              description={sheet.description || undefined}
-              actions={
-                <div className="flex items-center gap-2">
-                  <Badge variant={sheet.kind === 'SYSTEM' ? 'primary' : 'accent'}>{sheet.kind === 'SYSTEM' ? 'Curated' : 'Custom'}</Badge>
-                  {sheet.canEdit && sheet.kind === 'CUSTOM' && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Delete sheet"
-                      className="text-on-surface-muted hover:bg-error-container hover:text-danger"
-                      onClick={() => { if (window.confirm('Delete this sheet?')) del.mutate(); }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              }
-            />
+      {isLoading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full max-w-md" />
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            ))}
+          </div>
+        </div>
+      ) : !sheet ? (
+        <EmptyState icon={<ListChecks />} title="Sheet not found" description="This sheet may have been removed or is private." />
+      ) : (
+        <>
+          <SectionHeader
+            icon={<ListChecks />}
+            title={sheet.name}
+            description={sheet.description || undefined}
+            actions={
+              <div className="flex items-center gap-2">
+                <Badge variant={sheet.kind === 'SYSTEM' ? 'primary' : 'accent'}>{sheet.kind === 'SYSTEM' ? 'Curated' : 'Custom'}</Badge>
+                {sheet.canEdit && sheet.kind === 'CUSTOM' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Delete sheet"
+                    className="text-on-surface-muted hover:bg-error-container hover:text-danger"
+                    onClick={() => { if (window.confirm('Delete this sheet?')) del.mutate(); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            }
+          />
 
-            <div className="max-w-md rounded-2xl border border-outline-variant bg-surface-container-lowest p-5 shadow-elev-1">
-              <SheetProgressBar solved={sheet.solvedCount} total={sheet.total} />
-            </div>
+          <div className="max-w-md rounded-2xl border border-outline-variant bg-surface-container-lowest p-5 shadow-elev-1">
+            <SheetProgressBar solved={sheet.solvedCount} total={sheet.total} />
+          </div>
 
-            {groups.length === 0 ? (
-              <EmptyState icon={<ListChecks />} title="No problems in this sheet yet" description="Add problems from the Question Library." />
-            ) : (
-              groups.map((g) => (
-                <div key={g.section} className="space-y-3">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
-                    {g.section}
-                    <span className="text-xs font-normal text-on-surface-muted">
-                      {g.questions.filter((q) => q.progress?.status === 'SOLVED').length}/{g.questions.length}
-                    </span>
-                  </h2>
-                  <LibraryTable questions={g.questions} invalidate={[['sheet', slug]]} />
-                </div>
-              ))
-            )}
-          </>
-        )}
-      </div>
-    </AppLayout>
+          {groups.length === 0 ? (
+            <EmptyState icon={<ListChecks />} title="No problems in this sheet yet" description="Add problems from the Question Library." />
+          ) : (
+            groups.map((g) => (
+              <div key={g.section} className="space-y-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  {g.section}
+                  <span className="text-xs font-normal text-on-surface-muted">
+                    {g.questions.filter((q) => q.progress?.status === 'SOLVED').length}/{g.questions.length}
+                  </span>
+                </h2>
+                <LibraryTable questions={g.questions} invalidate={[['sheet', slug]]} />
+              </div>
+            ))
+          )}
+        </>
+      )}
+    </div>
   );
 };

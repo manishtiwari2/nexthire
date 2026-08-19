@@ -6,8 +6,7 @@ import {
   Trophy, Clock, TrendingUp, Sparkles, PlayCircle, Dumbbell, Award, AlertTriangle,
   ExternalLink, Minus, Plus, Activity as ActivityIcon, ChevronRight
 } from 'lucide-react';
-import { AppLayout } from '../components/layout/AppLayout';
-import { Card, Badge, DifficultyBadge, Button, Spinner, EmptyState } from '../shared/components/ui';
+import { Card, Badge, DifficultyBadge, Button, Skeleton, EmptyState } from '../shared/components/ui';
 import { useAuthStore } from '../store/useAuthStore';
 import { apiClient } from '../api/client';
 import {
@@ -259,310 +258,324 @@ export const DashboardPage: React.FC = () => {
 
   if (anyLoading) {
     return (
-      <AppLayout>
-        <div className="flex justify-center py-24"><Spinner size="lg" label="Loading your dashboard…" /></div>
-      </AppLayout>
+      <div className="space-y-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-8 w-72" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-44 rounded-xl" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Skeleton className="h-80 w-full rounded-2xl lg:col-span-2" />
+          <Skeleton className="h-80 w-full rounded-2xl" />
+        </div>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="space-y-8">
-        {/* Greeting */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-on-surface-muted">
-              {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-on-surface">
-              {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''} 👋
-            </h1>
-            <p className="mt-1 text-sm text-on-surface-variant">Here's your prep at a glance. Let's keep the streak alive.</p>
-          </div>
-          <Link to="/practice">
-            <Button leftIcon={<PlayCircle className="h-4 w-4" />}>Continue Practicing</Button>
-          </Link>
-        </div>
-
-        {/* Today strip */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <GoalRing solved={solvedToday} target={target} onTarget={setGoal} />
-          <MiniStat
-            icon={<Flame />} accent="bg-warning-container text-warning"
-            label="Current Streak" value={`${activity?.currentStreak ?? 0} ${activity?.currentStreak === 1 ? 'day' : 'days'}`}
-            hint={`Longest ${activity?.longestStreak ?? 0} · ${activity?.todayCount ?? 0} today`}
-          />
-          <MiniStat
-            icon={<RotateCcw />} accent="bg-info-container text-info"
-            label="Revision Due" value={stats?.revisionDue ?? 0}
-            hint={revision.length ? 'Ready to review now' : 'All caught up'}
-          />
-          <MiniStat
-            icon={<CheckCircle2 />} accent="bg-success-container text-success"
-            label="Solved" value={stats?.solvedTotal ?? 0}
-            hint={`of ${stats?.totalQuestions ?? 0} in library`}
-          />
-        </div>
-
-        {/* Main two-column area */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left / wide */}
-          <div className="space-y-6 lg:col-span-2">
-            {/* Daily challenge */}
-            <div>
-              <SectionTitle icon={<Zap />} to="/library" action="Browse library">Daily Challenge</SectionTitle>
-              {daily ? (
-                <Card className="overflow-hidden p-0">
-                  <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="accent"><Sparkles className="h-3 w-3" /> Today</Badge>
-                        <DifficultyBadge difficulty={daily.difficulty} />
-                        {daily.topic && <Badge variant="outline">{daily.topic.name}</Badge>}
-                        {daily.progress?.status === 'SOLVED' && <Badge variant="success" dot>Solved</Badge>}
-                      </div>
-                      <h3 className="truncate text-lg font-semibold text-on-surface">{daily.title}</h3>
-                      <p className="flex items-center gap-3 text-xs text-on-surface-muted">
-                        {daily.estimatedTimeMin && <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> ~{daily.estimatedTimeMin} min</span>}
-                        {typeof daily.acceptanceRate === 'number' && <span>{Math.round(daily.acceptanceRate)}% acceptance</span>}
-                      </p>
-                    </div>
-                    <SolveLink q={daily}>
-                      <Button rightIcon={<ArrowRight className="h-4 w-4" />}>
-                        {daily.progress?.status === 'SOLVED' ? 'Revisit' : 'Solve'}
-                      </Button>
-                    </SolveLink>
-                  </div>
-                </Card>
-              ) : (
-                <Card><EmptyState icon={<Zap />} title="No daily challenge" description="Seed the library to get a daily pick." /></Card>
-              )}
-            </div>
-
-            {/* Continue where you left off */}
-            {continueLast && (
-              <div>
-                <SectionTitle icon={<PlayCircle />}>Continue where you left off</SectionTitle>
-                <Card className="p-0">
-                  <div className="flex items-center justify-between gap-4 p-5">
-                    <div className="min-w-0 space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <DifficultyBadge difficulty={continueLast.question.difficulty} />
-                        <Badge variant={continueLast.progress.status === 'SOLVED' ? 'success' : continueLast.progress.status === 'ATTEMPTED' ? 'warning' : 'default'}>
-                          {continueLast.progress.status}
-                        </Badge>
-                      </div>
-                      <h3 className="truncate text-base font-semibold text-on-surface">{continueLast.question.title}</h3>
-                      <p className="text-xs text-on-surface-muted">Last opened {relTime(continueLast.progress.lastPracticedAt)}</p>
-                    </div>
-                    <SolveLink q={continueLast.question}>
-                      <Button variant="secondary" rightIcon={<ArrowRight className="h-4 w-4" />}>Resume</Button>
-                    </SolveLink>
-                  </div>
-                </Card>
-              </div>
-            )}
-
-            {/* Recent activity */}
-            <div>
-              <SectionTitle icon={<ActivityIcon />} to="/progress" action="Full progress">Recent Activity</SectionTitle>
-              <Card className="p-2">
-                {recentActivity.length ? (
-                  <div className="divide-y divide-outline-variant/50">
-                    {recentActivity.map((t) => (
-                      <QuestionRow
-                        key={t.question.id}
-                        q={t.question}
-                        right={
-                          <span className="flex items-center gap-2 text-xs text-on-surface-muted">
-                            <Badge variant={t.progress.status === 'SOLVED' ? 'success' : t.progress.status === 'ATTEMPTED' ? 'warning' : 'default'}>
-                              {t.progress.status === 'SOLVED' ? 'Solved' : t.progress.status === 'ATTEMPTED' ? 'Attempted' : 'Todo'}
-                            </Badge>
-                            {relTime(t.progress.lastPracticedAt)}
-                          </span>
-                        }
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState icon={<ActivityIcon />} title="No activity yet" description="Solve your first problem to see it here." />
-                )}
-              </Card>
-            </div>
-          </div>
-
-          {/* Right / narrow */}
-          <div className="space-y-6">
-            {/* Revision queue */}
-            <div>
-              <SectionTitle icon={<RotateCcw />} to="/revision" action="Open">Revision Queue</SectionTitle>
-              <Card className="p-2">
-                {revision.length ? (
-                  <>
-                    <div className="divide-y divide-outline-variant/50">
-                      {revision.slice(0, 5).map((r) => <QuestionRow key={r.question.id} q={r.question} />)}
-                    </div>
-                    <div className="p-2">
-                      <Link to="/revision"><Button fullWidth variant="outline" size="sm" leftIcon={<RotateCcw className="h-4 w-4" />}>Start Revision ({revision.length})</Button></Link>
-                    </div>
-                  </>
-                ) : (
-                  <EmptyState icon={<CheckCircle2 />} title="Nothing due" description="You're all caught up on revision." />
-                )}
-              </Card>
-            </div>
-
-            {/* Weak topics */}
-            <div>
-              <SectionTitle icon={<AlertTriangle />} to="/progress">Weak Topics</SectionTitle>
-              <Card className="p-5">
-                {stats?.weakTopics?.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {stats.weakTopics.map((t) => (
-                      <Link key={t.id} to="/library">
-                        <Badge variant="warning" className="cursor-pointer">{t.name} · {t.solved}/{t.seen}</Badge>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-on-surface-muted">Solve a few problems to surface your weak areas.</p>
-                )}
-              </Card>
-            </div>
-
-            {/* Bookmarks */}
-            <div>
-              <SectionTitle icon={<BookMarked />} to="/library">Bookmarks</SectionTitle>
-              <Card className="p-2">
-                {bookmarks.length ? (
-                  <div className="divide-y divide-outline-variant/50">
-                    {bookmarks.map((t) => <QuestionRow key={t.question.id} q={t.question} />)}
-                  </div>
-                ) : (
-                  <EmptyState icon={<BookMarked />} title="No bookmarks" description="Bookmark problems to revisit them fast." />
-                )}
-              </Card>
-            </div>
-          </div>
-        </div>
-
-        {/* Activity heatmap */}
+    <div className="space-y-8">
+      {/* Greeting */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <SectionTitle icon={<Flame />}>Activity</SectionTitle>
-          <Card className="space-y-5 p-5">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div><p className="text-xs text-on-surface-muted">Current streak</p><p className="text-xl font-bold text-on-surface">{activity?.currentStreak ?? 0}d</p></div>
-              <div><p className="text-xs text-on-surface-muted">Longest streak</p><p className="text-xl font-bold text-on-surface">{activity?.longestStreak ?? 0}d</p></div>
-              <div><p className="text-xs text-on-surface-muted">This week</p><p className="text-xl font-bold text-on-surface">{activity?.weekCount ?? 0}</p></div>
-              <div><p className="text-xs text-on-surface-muted">This month</p><p className="text-xl font-bold text-on-surface">{activity?.monthCount ?? 0}</p></div>
+          <p className="text-xs font-medium uppercase tracking-wide text-on-surface-muted">
+            {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-on-surface">
+            {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''} 👋
+          </h1>
+          <p className="mt-1 text-sm text-on-surface-variant">Here's your prep at a glance. Let's keep the streak alive.</p>
+        </div>
+        <Link to="/practice">
+          <Button leftIcon={<PlayCircle className="h-4 w-4" />}>Continue Practicing</Button>
+        </Link>
+      </div>
+
+      {/* Today strip */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <GoalRing solved={solvedToday} target={target} onTarget={setGoal} />
+        <MiniStat
+          icon={<Flame />} accent="bg-warning-container text-warning"
+          label="Current Streak" value={`${activity?.currentStreak ?? 0} ${activity?.currentStreak === 1 ? 'day' : 'days'}`}
+          hint={`Longest ${activity?.longestStreak ?? 0} · ${activity?.todayCount ?? 0} today`}
+        />
+        <MiniStat
+          icon={<RotateCcw />} accent="bg-info-container text-info"
+          label="Revision Due" value={stats?.revisionDue ?? 0}
+          hint={revision.length ? 'Ready to review now' : 'All caught up'}
+        />
+        <MiniStat
+          icon={<CheckCircle2 />} accent="bg-success-container text-success"
+          label="Solved" value={stats?.solvedTotal ?? 0}
+          hint={`of ${stats?.totalQuestions ?? 0} in library`}
+        />
+      </div>
+
+      {/* Main two-column area */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left / wide */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Daily challenge */}
+          <div>
+            <SectionTitle icon={<Zap />} to="/library" action="Browse library">Daily Challenge</SectionTitle>
+            {daily ? (
+              <Card className="overflow-hidden p-0">
+                <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="accent"><Sparkles className="h-3 w-3" /> Today</Badge>
+                      <DifficultyBadge difficulty={daily.difficulty} />
+                      {daily.topic && <Badge variant="outline">{daily.topic.name}</Badge>}
+                      {daily.progress?.status === 'SOLVED' && <Badge variant="success" dot>Solved</Badge>}
+                    </div>
+                    <h3 className="truncate text-lg font-semibold text-on-surface">{daily.title}</h3>
+                    <p className="flex items-center gap-3 text-xs text-on-surface-muted">
+                      {daily.estimatedTimeMin && <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> ~{daily.estimatedTimeMin} min</span>}
+                      {typeof daily.acceptanceRate === 'number' && <span>{Math.round(daily.acceptanceRate)}% acceptance</span>}
+                    </p>
+                  </div>
+                  <SolveLink q={daily}>
+                    <Button rightIcon={<ArrowRight className="h-4 w-4" />}>
+                      {daily.progress?.status === 'SOLVED' ? 'Revisit' : 'Solve'}
+                    </Button>
+                  </SolveLink>
+                </div>
+              </Card>
+            ) : (
+              <Card><EmptyState icon={<Zap />} title="No daily challenge" description="Seed the library to get a daily pick." /></Card>
+            )}
+          </div>
+
+          {/* Continue where you left off */}
+          {continueLast && (
+            <div>
+              <SectionTitle icon={<PlayCircle />}>Continue where you left off</SectionTitle>
+              <Card className="p-0">
+                <div className="flex items-center justify-between gap-4 p-5">
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <DifficultyBadge difficulty={continueLast.question.difficulty} />
+                      <Badge variant={continueLast.progress.status === 'SOLVED' ? 'success' : continueLast.progress.status === 'ATTEMPTED' ? 'warning' : 'default'}>
+                        {continueLast.progress.status}
+                      </Badge>
+                    </div>
+                    <h3 className="truncate text-base font-semibold text-on-surface">{continueLast.question.title}</h3>
+                    <p className="text-xs text-on-surface-muted">Last opened {relTime(continueLast.progress.lastPracticedAt)}</p>
+                  </div>
+                  <SolveLink q={continueLast.question}>
+                    <Button variant="secondary" rightIcon={<ArrowRight className="h-4 w-4" />}>Resume</Button>
+                  </SolveLink>
+                </div>
+              </Card>
             </div>
-            {activity && <Heatmap calendar={activity.calendar} />}
+          )}
+
+          {/* Recent activity */}
+          <div>
+            <SectionTitle icon={<ActivityIcon />} to="/progress" action="Full progress">Recent Activity</SectionTitle>
+            <Card className="p-2">
+              {recentActivity.length ? (
+                <div className="divide-y divide-outline-variant/50">
+                  {recentActivity.map((t) => (
+                    <QuestionRow
+                      key={t.question.id}
+                      q={t.question}
+                      right={
+                        <span className="flex items-center gap-2 text-xs text-on-surface-muted">
+                          <Badge variant={t.progress.status === 'SOLVED' ? 'success' : t.progress.status === 'ATTEMPTED' ? 'warning' : 'default'}>
+                            {t.progress.status === 'SOLVED' ? 'Solved' : t.progress.status === 'ATTEMPTED' ? 'Attempted' : 'Todo'}
+                          </Badge>
+                          {relTime(t.progress.lastPracticedAt)}
+                        </span>
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={<ActivityIcon />} title="No activity yet" description="Solve your first problem to see it here." />
+              )}
+            </Card>
+          </div>
+        </div>
+
+        {/* Right / narrow */}
+        <div className="space-y-6">
+          {/* Revision queue */}
+          <div>
+            <SectionTitle icon={<RotateCcw />} to="/revision" action="Open">Revision Queue</SectionTitle>
+            <Card className="p-2">
+              {revision.length ? (
+                <>
+                  <div className="divide-y divide-outline-variant/50">
+                    {revision.slice(0, 5).map((r) => <QuestionRow key={r.question.id} q={r.question} />)}
+                  </div>
+                  <div className="p-2">
+                    <Link to="/revision"><Button fullWidth variant="outline" size="sm" leftIcon={<RotateCcw className="h-4 w-4" />}>Start Revision ({revision.length})</Button></Link>
+                  </div>
+                </>
+              ) : (
+                <EmptyState icon={<CheckCircle2 />} title="Nothing due" description="You're all caught up on revision." />
+              )}
+            </Card>
+          </div>
+
+          {/* Weak topics */}
+          <div>
+            <SectionTitle icon={<AlertTriangle />} to="/progress">Weak Topics</SectionTitle>
+            <Card className="p-5">
+              {stats?.weakTopics?.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {stats.weakTopics.map((t) => (
+                    <Link key={t.id} to="/library">
+                      <Badge variant="warning" className="cursor-pointer">{t.name} · {t.solved}/{t.seen}</Badge>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-on-surface-muted">Solve a few problems to surface your weak areas.</p>
+              )}
+            </Card>
+          </div>
+
+          {/* Bookmarks */}
+          <div>
+            <SectionTitle icon={<BookMarked />} to="/library">Bookmarks</SectionTitle>
+            <Card className="p-2">
+              {bookmarks.length ? (
+                <div className="divide-y divide-outline-variant/50">
+                  {bookmarks.map((t) => <QuestionRow key={t.question.id} q={t.question} />)}
+                </div>
+              ) : (
+                <EmptyState icon={<BookMarked />} title="No bookmarks" description="Bookmark problems to revisit them fast." />
+              )}
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity heatmap */}
+      <div>
+        <SectionTitle icon={<Flame />}>Activity</SectionTitle>
+        <Card className="space-y-5 p-5">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div><p className="text-xs text-on-surface-muted">Current streak</p><p className="text-xl font-bold text-on-surface">{activity?.currentStreak ?? 0}d</p></div>
+            <div><p className="text-xs text-on-surface-muted">Longest streak</p><p className="text-xl font-bold text-on-surface">{activity?.longestStreak ?? 0}d</p></div>
+            <div><p className="text-xs text-on-surface-muted">This week</p><p className="text-xl font-bold text-on-surface">{activity?.weekCount ?? 0}</p></div>
+            <div><p className="text-xs text-on-surface-muted">This month</p><p className="text-xl font-bold text-on-surface">{activity?.monthCount ?? 0}</p></div>
+          </div>
+          {activity && <Heatmap calendar={activity.calendar} />}
+        </Card>
+      </div>
+
+      {/* Distribution + sheets */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Difficulty distribution */}
+        <div>
+          <SectionTitle icon={<TrendingUp />}>Difficulty Distribution</SectionTitle>
+          <Card className="space-y-4 p-5">
+            {([['EASY', 'Easy', 'bg-success'], ['MEDIUM', 'Medium', 'bg-warning'], ['HARD', 'Hard', 'bg-danger']] as const).map(([key, label, bar]) => {
+              const solved = stats?.byDifficulty[key] || 0;
+              const total = stats?.totalByDifficulty[key] || 0;
+              const pct = total ? Math.round((solved / total) * 100) : 0;
+              return (
+                <div key={key} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-on-surface-variant">{label}</span>
+                    <span className="text-on-surface-muted">{solved} / {total}</span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-high">
+                    <div className={`h-full rounded-full ${bar} transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
           </Card>
         </div>
 
-        {/* Distribution + sheets */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Difficulty distribution */}
-          <div>
-            <SectionTitle icon={<TrendingUp />}>Difficulty Distribution</SectionTitle>
-            <Card className="space-y-4 p-5">
-              {([['EASY', 'Easy', 'bg-success'], ['MEDIUM', 'Medium', 'bg-warning'], ['HARD', 'Hard', 'bg-danger']] as const).map(([key, label, bar]) => {
-                const solved = stats?.byDifficulty[key] || 0;
-                const total = stats?.totalByDifficulty[key] || 0;
-                const pct = total ? Math.round((solved / total) * 100) : 0;
-                return (
-                  <div key={key} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-on-surface-variant">{label}</span>
-                      <span className="text-on-surface-muted">{solved} / {total}</span>
-                    </div>
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-high">
-                      <div className={`h-full rounded-full ${bar} transition-all`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </Card>
-          </div>
-
-          {/* Study sheets */}
-          <div>
-            <SectionTitle icon={<ListChecks />} to="/sheets">Study Sheets</SectionTitle>
-            <Card className="p-2">
-              {sheets.length ? (
-                <div className="divide-y divide-outline-variant/50">
-                  {sheets.slice(0, 4).map((s) => {
-                    const pct = s.total ? Math.round((s.solvedCount / s.total) * 100) : 0;
-                    return (
-                      <Link key={s.id} to={`/sheets/${s.slug}`} className="group flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-surface-container-high">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary"><ListChecks className="h-4 w-4" /></div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-on-surface group-hover:text-primary">{s.name}</p>
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-container-high">
-                              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="shrink-0 text-[11px] text-on-surface-muted">{s.solvedCount}/{s.total}</span>
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyState icon={<ListChecks />} title="No sheets yet" description="Follow a curated sheet like Blind 75 to get started." />
-              )}
-            </Card>
-          </div>
-        </div>
-
-        {/* Recent contests */}
+        {/* Study sheets */}
         <div>
-          <SectionTitle icon={<Trophy />} to="/contests">Assessments</SectionTitle>
-          {activeContests.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {activeContests.map((c) => {
-                const isLive = c.status === 'LIVE';
-                return (
-                  <Link key={c.id} to={`/contest/${c.id}`}>
-                    <Card interactive className="flex h-full flex-col gap-3 p-4">
-                      <div className="flex items-center justify-between">
-                        <Badge variant={isLive ? 'danger' : c.status === 'ENDED' ? 'default' : 'info'} dot pulse={isLive}>{c.status}</Badge>
-                        <Trophy className="h-4 w-4 text-on-surface-muted" />
+          <SectionTitle icon={<ListChecks />} to="/sheets">Study Sheets</SectionTitle>
+          <Card className="p-2">
+            {sheets.length ? (
+              <div className="divide-y divide-outline-variant/50">
+                {sheets.slice(0, 4).map((s) => {
+                  const pct = s.total ? Math.round((s.solvedCount / s.total) * 100) : 0;
+                  return (
+                    <Link key={s.id} to={`/sheets/${s.slug}`} className="group flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-surface-container-high">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary"><ListChecks className="h-4 w-4" /></div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-on-surface group-hover:text-primary">{s.name}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-container-high">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="shrink-0 text-[11px] text-on-surface-muted">{s.solvedCount}/{s.total}</span>
+                        </div>
                       </div>
-                      <h3 className="truncate text-sm font-semibold text-on-surface">{c.title}</h3>
-                      <p className="line-clamp-2 text-xs text-on-surface-variant">{c.description}</p>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          ) : (
-            <Card><EmptyState icon={<Trophy />} title="No assessments yet" description="Join a live assessment with a code, or create one." action={<Link to="/contests"><Button variant="outline" size="sm">Go to Assessments</Button></Link>} /></Card>
-          )}
-        </div>
-
-        {/* Quick actions footer */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { to: '/practice', icon: <Dumbbell className="h-5 w-5" />, label: 'Practice', desc: 'Random & mixed sets' },
-            { to: '/library', icon: <BookMarked className="h-5 w-5" />, label: 'Library', desc: 'Browse all problems' },
-            { to: '/sheets', icon: <ListChecks className="h-5 w-5" />, label: 'Study Sheets', desc: 'Blind 75, NeetCode…' },
-            { to: '/progress', icon: <Award className="h-5 w-5" />, label: 'Progress', desc: 'Stats & mastery' },
-          ].map((a) => (
-            <Link key={a.to} to={a.to}>
-              <Card interactive className="flex items-center gap-3 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary">{a.icon}</div>
-                <div>
-                  <p className="text-sm font-semibold text-on-surface">{a.label}</p>
-                  <p className="text-xs text-on-surface-muted">{a.desc}</p>
-                </div>
-              </Card>
-            </Link>
-          ))}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState icon={<ListChecks />} title="No sheets yet" description="Follow a curated sheet like Blind 75 to get started." />
+            )}
+          </Card>
         </div>
       </div>
-    </AppLayout>
+
+      {/* Recent contests */}
+      <div>
+        <SectionTitle icon={<Trophy />} to="/contests">Assessments</SectionTitle>
+        {activeContests.length ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeContests.map((c) => {
+              const isLive = c.status === 'LIVE';
+              return (
+                <Link key={c.id} to={`/contest/${c.id}`}>
+                  <Card interactive className="flex h-full flex-col gap-3 p-4">
+                    <div className="flex items-center justify-between">
+                      <Badge variant={isLive ? 'danger' : c.status === 'ENDED' ? 'default' : 'info'} dot pulse={isLive}>{c.status}</Badge>
+                      <Trophy className="h-4 w-4 text-on-surface-muted" />
+                    </div>
+                    <h3 className="truncate text-sm font-semibold text-on-surface">{c.title}</h3>
+                    <p className="line-clamp-2 text-xs text-on-surface-variant">{c.description}</p>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <Card><EmptyState icon={<Trophy />} title="No assessments yet" description="Join a live assessment with a code, or create one." action={<Link to="/contests"><Button variant="outline" size="sm">Go to Assessments</Button></Link>} /></Card>
+        )}
+      </div>
+
+      {/* Quick actions footer */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { to: '/practice', icon: <Dumbbell className="h-5 w-5" />, label: 'Practice', desc: 'Random & mixed sets' },
+          { to: '/library', icon: <BookMarked className="h-5 w-5" />, label: 'Library', desc: 'Browse all problems' },
+          { to: '/sheets', icon: <ListChecks className="h-5 w-5" />, label: 'Study Sheets', desc: 'Blind 75, NeetCode…' },
+          { to: '/progress', icon: <Award className="h-5 w-5" />, label: 'Progress', desc: 'Stats & mastery' },
+        ].map((a) => (
+          <Link key={a.to} to={a.to}>
+            <Card interactive className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary">{a.icon}</div>
+              <div>
+                <p className="text-sm font-semibold text-on-surface">{a.label}</p>
+                <p className="text-xs text-on-surface-muted">{a.desc}</p>
+              </div>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 };
 

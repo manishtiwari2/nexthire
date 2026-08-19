@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trophy, Medal } from 'lucide-react';
-import { Spinner, EmptyState, Table, THead, TBody, TR, TH, TD } from '../../../shared/components/ui';
+import { Avatar, Spinner, EmptyState, Table, THead, TBody, TR, TH, TD } from '../../../shared/components/ui';
 import { cn } from '../../../shared/lib/cn';
 
 interface ContestLeaderboardProps {
@@ -55,12 +55,12 @@ export const ContestLeaderboard: React.FC<ContestLeaderboardProps> = ({ particip
                 </TD>
                 <TD>
                   <div className="flex items-center gap-2.5">
-                    <img
-                      src={p.user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(p.user?.name || 'User')}`}
-                      alt=""
-                      className="h-7 w-7 rounded-full border border-outline-variant bg-surface-container object-cover"
+                    <Avatar
+                      src={p.user?.avatarUrl}
+                      name={p.user?.name}
+                      className="h-7 w-7 rounded-full text-[10px]"
                     />
-                    <span className="font-medium text-on-surface">{p.user?.name || 'Anonymous Engineer'}</span>
+                    <span className="font-medium text-on-surface">{p.user?.name || 'Anonymous'}</span>
                   </div>
                 </TD>
                 <TD className="text-right font-mono text-sm font-bold text-primary">{p.score || 0}</TD>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import {
   Menu,
@@ -11,12 +11,16 @@ import {
   Users,
   UserCog,
 } from 'lucide-react';
-import { Badge } from '../../shared/components/ui';
+import { Avatar, Badge } from '../../shared/components/ui';
 import { cn } from '../../shared/lib/cn';
+import { getPageTitle } from './AppSidebar';
 
-export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> = ({ onMenuClick, title }) => {
+export const AppHeader: React.FC<{ onMenuClick?: () => void }> = ({ onMenuClick }) => {
   const { user, logout, isSubmitting } = useAuthStore();
   const navigate = useNavigate();
+  // Derived from the route rather than passed per-page, so the shared header title stays in sync
+  // with the sidebar's labels and no page needs to know about the chrome around it.
+  const title = getPageTitle(useLocation().pathname);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === 'ADMIN';
@@ -43,7 +47,6 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
     navigate('/login', { replace: true });
   };
 
-  const avatar = user?.avatar || user?.avatarUrl || `https://api.dicebear.com/7.x/glass/svg?seed=${encodeURIComponent(user?.email || 'user')}`;
   const roleLabel = isAdmin ? 'Administrator' : 'Member';
 
   return (
@@ -66,7 +69,7 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
           aria-expanded={open}
           className="flex items-center gap-2.5 rounded-xl border border-transparent py-1.5 pl-1.5 pr-2.5 transition-colors hover:border-outline-variant hover:bg-surface-container-high"
         >
-          <img src={avatar} alt="" className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container object-cover" />
+          <Avatar src={user?.avatar} name={user?.name} email={user?.email} size="sm" />
           <span className="hidden text-left sm:block">
             <span className="block text-xs font-semibold leading-tight text-on-surface">{user?.name || user?.email || 'User'}</span>
             <span className="block text-[10px] leading-tight text-on-surface-muted">{roleLabel}</span>
@@ -87,7 +90,7 @@ export const AppHeader: React.FC<{ onMenuClick?: () => void; title?: string }> =
             className="animate-scale-in absolute right-0 mt-2 w-60 origin-top-right overflow-hidden rounded-xl border border-outline-variant bg-surface-container shadow-elev-3"
           >
             <div className="flex items-center gap-3 border-b border-outline-variant p-3">
-              <img src={avatar} alt="" className="h-10 w-10 rounded-lg border border-outline-variant object-cover" />
+              <Avatar src={user?.avatar} name={user?.name} email={user?.email} size="md" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-on-surface">{user?.name || 'User'}</p>
                 <p className="truncate text-xs text-on-surface-muted">{user?.email}</p>

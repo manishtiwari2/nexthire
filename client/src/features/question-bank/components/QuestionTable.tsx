@@ -94,7 +94,7 @@ export const QuestionTable: React.FC<QuestionTableProps> = ({
                   </div>
                 </TD>
 
-                <TD className="hidden md:table-cell font-medium">{q.topic?.name || 'Algorithms'}</TD>
+                <TD className="hidden md:table-cell font-medium">{q.topic?.name || '—'}</TD>
 
                 <TD>
                   <DifficultyBadge difficulty={q.difficulty} />

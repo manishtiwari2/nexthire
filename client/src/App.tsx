@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './store/useAuthStore';
 import { ToastContainer } from './components/layout/ToastContainer';
+import { AppShell } from './components/layout/AppShell';
 import {
   ProtectedRoute,
   PublicOnlyRoute,
@@ -41,7 +42,12 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1
+      retry: 1,
+      // Returning to a page you visited moments ago shows its cached data instantly instead of
+      // reflashing a loader; a background refetch still keeps it fresh. gcTime keeps the cache
+      // warm long enough that back-and-forth navigation never lands on an empty cache.
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
     }
   }
 });
@@ -95,41 +101,56 @@ export const App: React.FC = () => (
               <Route path="/verify-email-required" element={<VerifyEmailRequiredPage />} />
 
               {/*
-                Authenticated. `requireVerified={false}` on the profile so an unverified
-                user can still reach their account settings (and resend the link) instead of
-                being trapped with no way forward.
+                Full-screen IDE routes — authenticated + verified, but deliberately kept
+                OUTSIDE the AppShell: each renders its own full-viewport layout with no
+                sidebar/header, so it must not sit under the shell's chrome.
+              */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/contest/:id" element={<LiveContestIDEPage />} />
+                <Route path="/questions/:id" element={<LivePracticePage />} />
+              </Route>
+
+              {/*
+                Every other authenticated page lives under a single, persistent AppShell so the
+                sidebar, header, and avatar mount once and never remount between pages — this is
+                what removes the shutter/blank/flicker on navigation.
+
+                The outer guard uses `requireVerified={false}` because the shell is shared by the
+                profile (reachable while unverified, so a user can resend the link instead of
+                being trapped) and by the verified app/admin pages, which re-check verification
+                and permission on their own nested guards below.
               */}
               <Route element={<ProtectedRoute requireVerified={false} />}>
-                <Route path="/profile" element={<ProfilePage />} />
-              </Route>
+                <Route element={<AppShell />}>
+                  <Route path="/profile" element={<ProfilePage />} />
 
-              {/* Authenticated + verified — the app proper. */}
-              <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/contests" element={<ContestsPage />} />
-                <Route path="/contest/:id" element={<LiveContestIDEPage />} />
-                <Route path="/questions" element={<QuestionBankPage />} />
-                <Route path="/questions/:id" element={<LivePracticePage />} />
-                <Route path="/library" element={<LibraryPage />} />
-                <Route path="/sheets" element={<StudySheetsPage />} />
-                <Route path="/sheets/:slug" element={<StudySheetDetailPage />} />
-                <Route path="/practice" element={<PracticePage />} />
-                <Route path="/revision" element={<RevisionPage />} />
-                <Route path="/progress" element={<ProgressPage />} />
-              </Route>
+                  {/* Authenticated + verified — the app proper. */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/contests" element={<ContestsPage />} />
+                    <Route path="/questions" element={<QuestionBankPage />} />
+                    <Route path="/library" element={<LibraryPage />} />
+                    <Route path="/sheets" element={<StudySheetsPage />} />
+                    <Route path="/sheets/:slug" element={<StudySheetDetailPage />} />
+                    <Route path="/practice" element={<PracticePage />} />
+                    <Route path="/revision" element={<RevisionPage />} />
+                    <Route path="/progress" element={<ProgressPage />} />
+                  </Route>
 
-              {/* ---- Admin ---- */}
-              {/* Guarded by capability, not role, so the matrix in shared/authz.js stays
-                  the single source of truth for who may do what. */}
-              <Route element={<ProtectedRoute permission="user:manage" />}>
-                <Route path="/admin/users" element={<AdminUsersPage />} />
-              </Route>
-              <Route element={<ProtectedRoute permission="question:manage" />}>
-                <Route path="/admin/questions/create" element={<AdminCreateQuestionPage />} />
-              </Route>
-              <Route element={<ProtectedRoute permission="contest:manage" />}>
-                <Route path="/admin/contests/create" element={<AdminCreateContestPage />} />
+                  {/* ---- Admin ---- */}
+                  {/* Guarded by capability, not role, so the matrix in shared/authz.js stays
+                      the single source of truth for who may do what. */}
+                  <Route element={<ProtectedRoute permission="user:manage" />}>
+                    <Route path="/admin/users" element={<AdminUsersPage />} />
+                  </Route>
+                  <Route element={<ProtectedRoute permission="question:manage" />}>
+                    <Route path="/admin/questions/create" element={<AdminCreateQuestionPage />} />
+                  </Route>
+                  <Route element={<ProtectedRoute permission="contest:manage" />}>
+                    <Route path="/admin/contests/create" element={<AdminCreateContestPage />} />
+                  </Route>
+                </Route>
               </Route>
 
               {/* ---- Fallback ---- */}
