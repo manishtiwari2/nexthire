@@ -37,6 +37,7 @@ Browse and solve problems in a real in-browser editor, submit to a sandboxed mul
 - [Testing](#testing)
 - [Production & Deployment](#production--deployment)
 - [API](#api)
+- [Documentation](#documentation)
 - [Engineering Highlights](#engineering-highlights)
 - [Known Limitations](#known-limitations)
 - [Contributing](#contributing)
@@ -216,14 +217,27 @@ nexthire/
 │       │   ├── revision/         # SM-2 spaced repetition
 │       │   └── judge/            # queue, worker, processor, executors, verdict logic
 │       └── shared/               # prisma client, permission matrix (authz), rate limiting
-├── docs/                         # historical audit/architecture reports (see note below)
+├── docs/                         # project documentation (PRD, system design, API, database, testing, roadmap, ADRs)
 ├── docker-compose.yml            # PostgreSQL + Redis + API + judge worker + nginx frontend
 └── .env.example                  # full configuration reference
 ```
 
-> **Note on `docs/`:** these reports are dated snapshots from an earlier review pass and describe an
-> older state of the codebase (before real auth and the sandboxed judge were built). Treat this
-> README and the source as the current source of truth.
+---
+
+## Documentation
+
+Detailed, repository-specific documentation lives in [`docs/`](docs/). This README is the entry
+point; the documents below go deep on each area and are kept in sync with the source.
+
+| Document | What's inside |
+|---|---|
+| [PRD](docs/PRD.md) | Product requirements: goals, personas, user stories, functional/non-functional requirements (tagged Implemented/Planned/Proposed). |
+| [System Design](docs/SYSTEM_DESIGN.md) | Architecture, the judge, auth/session security, data flows, deployment, and tradeoffs. |
+| [API Reference](docs/API.md) | Endpoints, auth model, permissions, conventions, and request/response examples. |
+| [Database](docs/DATABASE.md) | Schema (27 models), ER diagram, enums, relationships, indexes, and migrations. |
+| [Testing](docs/TESTING.md) | Test stack, inventory (219 tests), how to run, coverage, and gaps. |
+| [Roadmap](docs/ROADMAP.md) | Completed / in progress / planned / proposed — evidence-based. |
+| [Architecture Decisions](docs/decisions/) | ADRs for the judge, auth, authorization, architecture, data layer, and run/submit design. |
 
 ---
 
